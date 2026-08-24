@@ -1,6 +1,7 @@
 import type { ConditionNode } from "../model/index.js";
 import {
 	ConditionOperator,
+	isOperator,
 	isPlainObject,
 	MATCH_QUANTIFIERS,
 	type MatchQuantifier,
@@ -71,6 +72,20 @@ const relationNodes = (
 		);
 };
 
+const isCompiledNode = (value: Record<string, unknown>): boolean => {
+	const keys = Object.keys(value);
+
+	if (keys.length === 3 && typeof value.op === "string") {
+		return isOperator(value.op) && "field" in value && "value" in value;
+	}
+
+	return (
+		typeof value.relation === "string" &&
+		(value.type === RelationKind.One || value.type === RelationKind.Many) &&
+		isPlainObject(value.where)
+	);
+};
+
 export const compileWhereInput = (
 	shorthand: unknown,
 	ac: ResourceMap,
@@ -78,6 +93,12 @@ export const compileWhereInput = (
 ): Node => {
 	if (!isPlainObject(shorthand)) {
 		return nothing<Node>();
+	}
+
+	if (isCompiledNode(shorthand)) {
+		throw new TypeError(
+			"veto: where received an already-compiled condition, which reads as fields named after its own keys. Pass the shorthand you wrote it from, or the whole rule through parseRules.",
+		);
 	}
 
 	const relations = relationsOf(ac, resource);
