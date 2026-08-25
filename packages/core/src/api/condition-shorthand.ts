@@ -3,6 +3,7 @@ import {
 	ConditionOperator,
 	isOperator,
 	isPlainObject,
+	type Row,
 } from "../shared/index.js";
 import { everything } from "./vacuous.js";
 
@@ -51,10 +52,8 @@ export const combineNodes = <N>(nodes: N[]): N | { and: N[] } => {
 	return { and: nodes };
 };
 
-const extractFieldNodes = (
-	condition: Record<string, unknown>,
-): FieldConditionNode<Record<string, unknown>>[] => {
-	const nodes: FieldConditionNode<Record<string, unknown>>[] = [];
+const extractFieldNodes = (condition: Row): FieldConditionNode<Row>[] => {
+	const nodes: FieldConditionNode<Row>[] = [];
 
 	for (const [field, raw] of Object.entries(condition)) {
 		if (["and", "or", "not"].includes(field) || raw === undefined) {
@@ -80,12 +79,12 @@ const extractFieldNodes = (
 
 export const compilePayloadConstraints = (
 	condition: unknown,
-): FieldConditionNode<Record<string, unknown>> => {
+): FieldConditionNode<Row> => {
 	if (!isPlainObject(condition)) {
-		return everything<FieldConditionNode<Record<string, unknown>>>();
+		return everything<FieldConditionNode<Row>>();
 	}
 
-	const nodes: FieldConditionNode<Record<string, unknown>>[] = [];
+	const nodes: FieldConditionNode<Row>[] = [];
 
 	if ("and" in condition && Array.isArray(condition.and)) {
 		nodes.push({ and: condition.and.map(compilePayloadConstraints) });

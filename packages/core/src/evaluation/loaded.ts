@@ -1,8 +1,8 @@
+import type { Row } from "../shared/index.js";
+
 const LOADED = Symbol.for("veto:loaded");
 
-const loadedRelationNames = (
-	instance: Record<string, unknown>,
-): Set<string> | undefined => {
+const loadedRelationNames = (instance: Row): Set<string> | undefined => {
 	if (!Object.hasOwn(instance, LOADED)) {
 		return undefined;
 	}
@@ -30,7 +30,7 @@ const loadedRelationNames = (
  * const withAuthor = markLoaded(post, "author", author);
  * const withoutBlog = markLoaded(post, "blog", null);
  */
-export const markLoaded = <T extends Record<string, unknown>>(
+export const markLoaded = <T extends Row>(
 	instance: T,
 	relation: string,
 	value: unknown,
@@ -51,9 +51,6 @@ export const markLoaded = <T extends Record<string, unknown>>(
 	);
 };
 
-export const isLoaded = (
-	instance: Record<string, unknown>,
-	relation: string,
-): boolean => {
+export const isLoaded = (instance: Row, relation: string): boolean => {
 	return loadedRelationNames(instance)?.has(relation) ?? false;
 };

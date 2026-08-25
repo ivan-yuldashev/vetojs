@@ -18,7 +18,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
-		"bench": "vitest bench",
+		"bench": "pnpm build && vitest bench",
 		"type-bench": "tsc -p packages/core/type-bench/tsconfig.json --extendedDiagnostics",
 		"typecheck": "pnpm typecheck:packages && pnpm --filter \"./examples/*\" typecheck",
 		"typecheck:packages": "tsc -p tsconfig.json --noEmit",

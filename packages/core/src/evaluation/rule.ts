@@ -3,8 +3,10 @@ import {
 	isPayloadScoped,
 	isPlainObject,
 	MANAGE_ACTION,
+	type Row,
 	RuleEffect,
 } from "../shared/index.js";
+import type { Matcher } from "./compile.js";
 import { evaluateCondition } from "./condition.js";
 import type { Verdict } from "./verdict.js";
 
@@ -19,9 +21,13 @@ const actionMatches = (
 	return ruleAction === MANAGE_ACTION || ruleAction === action;
 };
 
-export type Settled<T extends Record<string, unknown>> = { rule?: Rule<T> };
+export const prohibitsRow = <T extends Row>(rule: Rule<T>): boolean => {
+	return rule.effect === RuleEffect.Deny && !isPayloadScoped(rule);
+};
 
-export const ruleMatches = <T extends Record<string, unknown>>(
+export type Settled<T extends Row> = { rule?: Rule<T> };
+
+export const ruleMatches = <T extends Row>(
 	rule: Rule<T>,
 	action: string,
 	resource: string,
@@ -29,7 +35,7 @@ export const ruleMatches = <T extends Record<string, unknown>>(
 	return rule.resource === resource && actionMatches(rule.action, action);
 };
 
-export const ruleWhereVerdict = <T extends Record<string, unknown>>(
+export const ruleWhereVerdict = <T extends Row>(
 	rule: Rule<T>,
 	action: string,
 	resource: string,
@@ -44,12 +50,18 @@ export const ruleWhereVerdict = <T extends Record<string, unknown>>(
 		: evaluateCondition(rule.where, instance);
 };
 
-export const evaluateRules = <T extends Record<string, unknown>>(
+export type Prepared = {
+	grantIsFinal: boolean;
+	matchers: (Matcher | undefined)[];
+};
+
+export const evaluateRules = <T extends Row>(
 	rules: Rule<T>[],
 	action: string,
 	resource: string,
 	instance: unknown,
 	settled?: Settled<T>,
+	prepared?: Prepared,
 ): boolean => {
 	let allowed = false;
 
@@ -57,18 +69,32 @@ export const evaluateRules = <T extends Record<string, unknown>>(
 		return allowed;
 	}
 
-	for (const rule of rules) {
-		if (allowed && rule.effect !== "deny") {
+	const matchers = prepared?.matchers;
+	const grantIsFinal = prepared?.grantIsFinal ?? false;
+
+	for (let index = 0; index < rules.length; index++) {
+		const rule = rules[index];
+
+		if (rule === undefined) {
+			continue;
+		}
+
+		if (allowed && rule.effect !== RuleEffect.Deny) {
 			continue;
 		}
 
 		const isDeny = rule.effect === RuleEffect.Deny;
 
-		if (isDeny && isPayloadScoped(rule)) {
+		if (isDeny && !prohibitsRow(rule)) {
 			continue;
 		}
 
-		const verdict = ruleWhereVerdict(rule, action, resource, instance);
+		const matcher = matchers?.[index];
+
+		const verdict =
+			matcher === undefined
+				? ruleWhereVerdict(rule, action, resource, instance)
+				: matcher(instance);
 
 		if (isDeny && verdict !== false) {
 			if (settled) {
@@ -81,8 +107,12 @@ export const evaluateRules = <T extends Record<string, unknown>>(
 		if (!isDeny && verdict === true) {
 			allowed = true;
 
-			if (settled) {
-				settled.rule ??= rule;
+			if (settled && settled.rule === undefined) {
+				settled.rule = rule;
+			}
+
+			if (grantIsFinal) {
+				return true;
 			}
 		}
 	}
@@ -90,7 +120,7 @@ export const evaluateRules = <T extends Record<string, unknown>>(
 	return allowed;
 };
 
-export const mightAllow = <T extends Record<string, unknown>>(
+export const mightAllow = <T extends Row>(
 	rules: Rule<T>[],
 	action: string,
 	resource: string,
@@ -118,8 +148,8 @@ export const mightAllow = <T extends Record<string, unknown>>(
 		if (rule.effect !== RuleEffect.Deny) {
 			hasAllow = true;
 
-			if (settled) {
-				settled.rule ??= rule;
+			if (settled && settled.rule === undefined) {
+				settled.rule = rule;
 			}
 		}
 	}

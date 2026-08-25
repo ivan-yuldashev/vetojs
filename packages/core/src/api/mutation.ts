@@ -12,11 +12,12 @@ import {
 	type ConditionOperator,
 	isPayloadScoped,
 	isPlainObject,
+	type Row,
 	RuleEffect,
 } from "../shared/index.js";
 import type { PayloadResult, PayloadViolation } from "./mutation.types.js";
 
-export const canMutate = <T extends Record<string, unknown>>(
+export const canMutate = <T extends Row>(
 	rules: Rule<T>[],
 	action: string,
 	resource: string,
@@ -24,7 +25,7 @@ export const canMutate = <T extends Record<string, unknown>>(
 	settled?: Settled<T>,
 ): boolean => evaluateRules(rules, action, resource, row, settled);
 
-export const permittedFields = <T extends Record<string, unknown>>(
+export const permittedFields = <T extends Row>(
 	rules: Rule<T>[],
 	action: string,
 	resource: string,
@@ -46,9 +47,11 @@ export const permittedFields = <T extends Record<string, unknown>>(
 	}
 
 	const allowsAll = allows.some((rule) => rule.payload?.fields === undefined);
+
 	const allowFields = new Set<keyof T>(
 		allows.flatMap((rule) => rule.payload?.fields ?? []),
 	);
+
 	const denyFields = new Set<keyof T>(
 		denies.flatMap((rule) => rule.payload?.fields ?? []),
 	);
@@ -58,7 +61,7 @@ export const permittedFields = <T extends Record<string, unknown>>(
 	);
 };
 
-const fieldsOf = <T extends Record<string, unknown>>(rules: Rule<T>[]) => {
+const fieldsOf = <T extends Row>(rules: Rule<T>[]) => {
 	return rules.flatMap((rule) => rule.payload?.fields ?? []);
 };
 
@@ -68,7 +71,7 @@ type FieldConstraint = {
 	value: unknown;
 };
 
-const fieldConstraints = <T extends Record<string, unknown>>(
+const fieldConstraints = <T extends Row>(
 	constraint: ConditionNode<T> | undefined,
 ): FieldConstraint[] | null => {
 	if (constraint === undefined) {
@@ -104,16 +107,18 @@ const fieldConstraints = <T extends Record<string, unknown>>(
 	return null;
 };
 
+const holds = (constraint: FieldConstraint, value: unknown): Verdict => {
+	return evaluateOperator(constraint.op, value, constraint.value);
+};
+
 const constraintsHold = (
 	constraints: FieldConstraint[],
 	value: unknown,
 ): Verdict => {
-	return kleeneAndOver(constraints, (constraint) =>
-		evaluateOperator(constraint.op, value, constraint.value),
-	);
+	return kleeneAndOver(constraints, holds, value);
 };
 
-const getFieldConstraintsForRule = <T extends Record<string, unknown>>(
+const getFieldConstraintsForRule = <T extends Row>(
 	rule: Rule<T>,
 	targetField: string,
 ): FieldConstraint[] | null => {
@@ -130,7 +135,7 @@ const getFieldConstraintsForRule = <T extends Record<string, unknown>>(
 	return all.filter((constraint) => constraint.field === targetField);
 };
 
-export const validatePayload = <T extends Record<string, unknown>>(
+export const validatePayload = <T extends Row>(
 	rules: Rule<T>[],
 	action: string,
 	resource: string,

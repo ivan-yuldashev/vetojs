@@ -7,6 +7,7 @@ import {
 	MATCH_QUANTIFIERS,
 	RELATION_KINDS,
 	RelationKind,
+	type Row,
 	RULE_EFFECTS,
 	RuleEffect,
 } from "../shared/index.js";
@@ -27,7 +28,7 @@ export const CONDITION_SHAPES = [
 type ConditionShape = (typeof CONDITION_SHAPES)[number];
 
 type ShapeValidator = (
-	node: Record<string, unknown>,
+	node: Row,
 	path: string,
 	errors: string[],
 	depth: number,
@@ -47,11 +48,7 @@ const isStringArray = (value: unknown): value is string[] => {
 	);
 };
 
-const validateFieldNode = (
-	node: Record<string, unknown>,
-	path: string,
-	errors: string[],
-): void => {
+const validateFieldNode = (node: Row, path: string, errors: string[]): void => {
 	if (typeof node.field !== "string") {
 		errors.push(`${path}.field: expected a string`);
 	}
@@ -81,7 +78,7 @@ const quoted = (values: readonly string[]): string => {
 };
 
 const validateRelationCardinality = (
-	node: Record<string, unknown>,
+	node: Row,
 	path: string,
 	errors: string[],
 ): void => {
@@ -110,7 +107,7 @@ const validateRelationCardinality = (
 };
 
 const validateRelation = (
-	node: Record<string, unknown>,
+	node: Row,
 	path: string,
 	errors: string[],
 	depth: number,
@@ -148,7 +145,7 @@ const walkList = (
 };
 
 const shapeOf = (
-	node: Record<string, unknown>,
+	node: Row,
 	path: string,
 	errors: string[],
 ): ConditionShape | undefined => {
@@ -211,7 +208,7 @@ const conditionGrammar = (): ConditionGrammar => ({
 
 const outsideConstraints =
 	(shape: ConditionShape) =>
-	(_node: Record<string, unknown>, path: string, errors: string[]): void => {
+	(_node: Row, path: string, errors: string[]): void => {
 		errors.push(
 			`${path}: "${shape}" is not allowed in payload constraints — they take a field condition or "and"`,
 		);
@@ -288,7 +285,7 @@ const validateRule = (rule: unknown, path: string, errors: string[]): void => {
 };
 
 const conditionVocabularyReasons = (
-	node: ConditionNode<Record<string, unknown>>,
+	node: ConditionNode<Row>,
 	resource: string,
 	vocabulary: Vocabulary,
 	path: string,

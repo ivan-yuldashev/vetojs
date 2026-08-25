@@ -161,6 +161,10 @@ const overElements = (
 	return isPresent(actual) ? undefined : false;
 };
 
+const memberOf = (item: unknown, elements: readonly unknown[]): Verdict => {
+	return memberVerdict(item, elements);
+};
+
 const overWanted = (
 	actual: unknown,
 	expected: unknown,
@@ -170,9 +174,7 @@ const overWanted = (
 		return undefined;
 	}
 
-	return overElements(actual, (elements) =>
-		fold(expected, (item) => memberVerdict(item, elements)),
-	);
+	return overElements(actual, (elements) => fold(expected, memberOf, elements));
 };
 
 export const evaluateOperator = (
