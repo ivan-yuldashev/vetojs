@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defineAbilities } from "../../src/api/define-abilities.js";
 import { shape } from "../../src/api/schema.js";
 import { compileWhereInput } from "../../src/api/where-input.js";
-import {
-	evaluateCondition,
-	evaluateRules,
-} from "../../src/evaluation/index.js";
+import { evaluateCondition } from "../../src/evaluation/index.js";
 
 const ac = defineAbilities({
 	resources: {
@@ -201,23 +198,10 @@ describe("compileWhereInput — malformed input compiles fail-closed", () => {
 		});
 	});
 
-	it("compiles a two-operator field to an equality that grants nothing", () => {
-		const node = compileWhereInput({ views: { gt: 1, lt: 5 } }, ac, "post");
-
-		expect(node).toEqual({
-			field: "views",
-			op: "eq",
-			value: { gt: 1, lt: 5 },
-		});
-		expect(evaluateCondition(node, { views: 3 })).toBeUndefined();
-		expect(
-			evaluateRules(
-				[{ effect: "allow", action: "read", resource: "post", where: node }],
-				"read",
-				"post",
-				{ views: 3 },
-			),
-		).toBe(false);
+	it("refuses a field that names two operators at once", () => {
+		expect(() =>
+			compileWhereInput({ views: { gt: 1, lt: 5 } }, ac, "post"),
+		).toThrow(/takes one operator/);
 	});
 
 	it("compiles an empty operator object the same fail-closed way", () => {

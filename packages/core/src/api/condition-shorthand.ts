@@ -33,13 +33,21 @@ export const asOperator = (
 	}
 
 	const entries = Object.entries(raw);
-	const first = entries[0];
+	const keys = entries.map(([key]) => key);
 
-	if (entries.length !== 1 || first === undefined) {
+	if (keys.length > 1 && keys.every(isOperator)) {
+		throw new TypeError(
+			`veto: ${keys.map((key) => `"${key}"`).join(" and ")} name one field at once — a condition takes one operator, so write and: [${keys.map((key) => `{ field: { ${key}: … } }`).join(", ")}].`,
+		);
+	}
+
+	const single = keys.length === 1 ? entries[0] : undefined;
+
+	if (single === undefined) {
 		return null;
 	}
 
-	const [operator, value] = first;
+	const [operator, value] = single;
 
 	if (!isOperator(operator)) {
 		return null;
