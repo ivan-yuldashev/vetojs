@@ -62,6 +62,13 @@ const validateFieldNode = (node: Row, path: string, errors: string[]): void => {
 		return;
 	}
 
+	if (node.value === undefined) {
+		errors.push(
+			`${path}.value: undefined is not a value a rule may compare to`,
+		);
+		return;
+	}
+
 	const needsArray =
 		node.op === ConditionOperator.In ||
 		node.op === ConditionOperator.NotIn ||

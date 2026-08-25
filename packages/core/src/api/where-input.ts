@@ -11,6 +11,7 @@ import {
 	asOperator,
 	combineNodes,
 	normalizeConditionValue,
+	refuseUndefined,
 } from "./condition-shorthand.js";
 import type { Relation, ResourceMap } from "./define-abilities.js";
 import { nothing } from "./vacuous.js";
@@ -65,11 +66,13 @@ const relationNodes = (
 		return [nothing<Node>()];
 	}
 
-	return Object.entries(value)
-		.filter(([, nested]) => nested !== undefined)
-		.map(([match, nested]) =>
-			quantifierNode(key, match, nested, ac, relation.resource),
-		);
+	return Object.entries(value).map(([match, nested]) => {
+		if (nested === undefined) {
+			refuseUndefined(`where.${key}`, match);
+		}
+
+		return quantifierNode(key, match, nested, ac, relation.resource);
+	});
 };
 
 const isCompiledNode = (value: Record<string, unknown>): boolean => {
@@ -106,7 +109,7 @@ export const compileWhereInput = (
 
 	for (const [key, value] of Object.entries(shorthand)) {
 		if (value === undefined) {
-			continue;
+			refuseUndefined("where", key);
 		}
 
 		if (key === "and" || key === "or") {
@@ -152,6 +155,12 @@ export const compileWhereInput = (
 						op: ConditionOperator.Equal,
 						value: normalizeConditionValue(value),
 					},
+		);
+	}
+
+	if (nodes.length === 0 && Object.keys(shorthand).length > 0) {
+		throw new TypeError(
+			`veto: where describes no condition — ${JSON.stringify(shorthand)} compiles to nothing, which would widen the rule to every row.`,
 		);
 	}
 

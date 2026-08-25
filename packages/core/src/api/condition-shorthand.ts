@@ -19,6 +19,12 @@ export const normalizeConditionValue = (value: unknown): unknown => {
 	return value;
 };
 
+export const refuseUndefined = (scope: string, key: PropertyKey): never => {
+	throw new TypeError(
+		`veto: ${scope}.${String(key)} is undefined — dropping it would widen the rule to every row. Pass a value, or build the shorthand without the key.`,
+	);
+};
+
 export const asOperator = (
 	raw: unknown,
 ): { op: ConditionOperator; value: unknown } | null => {
@@ -35,9 +41,15 @@ export const asOperator = (
 
 	const [operator, value] = first;
 
-	return isOperator(operator)
-		? { op: operator, value: normalizeConditionValue(value) }
-		: null;
+	if (!isOperator(operator)) {
+		return null;
+	}
+
+	if (value === undefined) {
+		refuseUndefined("where", operator);
+	}
+
+	return { op: operator, value: normalizeConditionValue(value) };
 };
 
 export const combineNodes = <N>(nodes: N[]): N | { and: N[] } => {
@@ -56,8 +68,12 @@ const extractFieldNodes = (condition: Row): FieldConditionNode<Row>[] => {
 	const nodes: FieldConditionNode<Row>[] = [];
 
 	for (const [field, raw] of Object.entries(condition)) {
-		if (["and", "or", "not"].includes(field) || raw === undefined) {
+		if (["and", "or", "not"].includes(field)) {
 			continue;
+		}
+
+		if (raw === undefined) {
+			refuseUndefined("payload constraints", field);
 		}
 
 		const operator = asOperator(raw);
