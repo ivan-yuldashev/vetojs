@@ -33,6 +33,8 @@ import { alias, type PgTable, QueryBuilder } from "drizzle-orm/pg-core";
 
 const TRUE = sql`true`;
 const FALSE = sql`false`;
+const unknownWhenPresent = (column: Column): SQL =>
+	sql`case when ${column} is null then false else null::boolean end`;
 
 const totalize = (predicate: SQL): SQL => sql`coalesce(${predicate}, false)`;
 
@@ -52,6 +54,23 @@ const SCALAR_TYPES: readonly string[] = [
 ];
 
 const NUMERIC_TYPES: readonly string[] = ["number", "bigint"];
+
+const ORDERING: readonly ConditionOperator[] = [
+	ConditionOperator.GreaterThan,
+	ConditionOperator.GreaterThanOrEqual,
+	ConditionOperator.LessThan,
+	ConditionOperator.LessThanOrEqual,
+];
+
+const ORDERABLE_TYPES: readonly string[] = [
+	"string",
+	"number",
+	"bigint",
+	"date",
+	"custom",
+];
+
+const TEXTUAL_TYPES: readonly string[] = ["string", "custom"];
 
 const isScalar = (value: unknown): boolean => {
 	return (
@@ -75,6 +94,26 @@ const typeMatches = (column: Column, value: unknown): boolean => {
 		default:
 			return true;
 	}
+};
+
+const answersUnknown = (
+	column: Column,
+	op: ConditionOperator,
+	scalar: unknown,
+): boolean => {
+	if (ORDERING.includes(op)) {
+		return (
+			!ORDERABLE_TYPES.includes(column.dataType) || !typeMatches(column, scalar)
+		);
+	}
+
+	if (op === ConditionOperator.Contains) {
+		return (
+			typeof scalar === "string" && !TEXTUAL_TYPES.includes(column.dataType)
+		);
+	}
+
+	return false;
 };
 
 const scalarOrThrow = (
@@ -241,7 +280,15 @@ const compileField = (
 
 	const scalar = scalarOrThrow(column, value, op);
 
-	if (scalar !== null && !typeMatches(column, scalar)) {
+	if (scalar === null) {
+		return compare(column, scalar);
+	}
+
+	if (answersUnknown(column, op, scalar)) {
+		return unknownWhenPresent(column);
+	}
+
+	if (!typeMatches(column, scalar)) {
 		return op === ConditionOperator.NotEqual ? TRUE : FALSE;
 	}
 
