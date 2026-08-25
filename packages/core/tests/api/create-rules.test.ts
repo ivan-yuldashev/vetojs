@@ -208,21 +208,18 @@ describe("createRules", () => {
 		});
 	});
 
-	it("compiles unreadable payload constraints to no constraint at all", () => {
-		expect(
+	it("refuses payload constraints it cannot read", () => {
+		expect(() =>
 			allow("update", "post", {
 				payload: { fields: ["status"], constraints: "garbage" as never },
 			}),
-		).toEqual({
-			effect: "allow",
-			action: "update",
-			resource: "post",
-			payload: { fields: ["status"], constraints: { and: [] } },
-		});
+		).toThrow(TypeError);
+	});
 
+	it("carries no constraint when the shorthand names none", () => {
 		expect(
 			allow("update", "post", { payload: { constraints: {} } }).payload,
-		).toEqual({ constraints: { and: [] } });
+		).toEqual({});
 	});
 });
 

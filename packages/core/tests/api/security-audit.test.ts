@@ -214,6 +214,24 @@ describe("security audit", () => {
 		expect(granted).toBe(false);
 	});
 
+	it("F-C: a deny whose payload names nothing stays a blanket veto", () => {
+		const row: User = { id: "u", role: "admin" };
+
+		const empty = buildAbility(ac, [
+			allow("update", "user"),
+			deny("update", "user", { payload: {} }),
+		]);
+
+		const vacuous = buildAbility(ac, [
+			allow("update", "user"),
+			deny("update", "user", { payload: { constraints: {} } }),
+		]);
+
+		expect(vacuous.can("update", "user", row)).toBe(
+			empty.can("update", "user", row),
+		);
+	});
+
 	it("C: an ordered deny does not fire on an absent value (decidable non-match)", () => {
 		const ability = buildAbility(ac, [
 			allow("update", "txn"),
@@ -250,24 +268,6 @@ describe("open findings — an it.fails turns red once the finding is fixed", ()
 		}
 
 		expect(granted).toBe(false);
-	});
-
-	it.fails("a deny whose payload names nothing stays a blanket veto", () => {
-		const row: User = { id: "u", role: "admin" };
-
-		const empty = buildAbility(ac, [
-			allow("update", "user"),
-			deny("update", "user", { payload: {} }),
-		]);
-
-		const vacuous = buildAbility(ac, [
-			allow("update", "user"),
-			deny("update", "user", { payload: { constraints: {} } }),
-		]);
-
-		expect(vacuous.can("update", "user", row)).toBe(
-			empty.can("update", "user", row),
-		);
 	});
 
 	it.fails("the rules an ability exposes are a snapshot of the policy", () => {

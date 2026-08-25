@@ -1,5 +1,5 @@
 import type { Rule } from "../model/index.js";
-import { RuleEffect } from "../shared/index.js";
+import { RuleEffect, saysNothing } from "../shared/index.js";
 import type { CheckedRule } from "./checked-rules.types.js";
 import { compilePayloadConstraints } from "./condition-shorthand.js";
 import type { RuleFactory } from "./create-rules.types.js";
@@ -19,7 +19,7 @@ const makeRule = (
 	if (where !== undefined) {
 		const compiled = compileWhereInput(where, ac, resource);
 
-		if (!("and" in compiled && compiled.and.length === 0)) {
+		if (!saysNothing(compiled)) {
 			rule.where = compiled;
 		}
 	}
@@ -34,7 +34,11 @@ const makeRule = (
 		}
 
 		if (payload.constraints !== undefined) {
-			compiled.constraints = compilePayloadConstraints(payload.constraints);
+			const constraints = compilePayloadConstraints(payload.constraints);
+
+			if (!saysNothing(constraints)) {
+				compiled.constraints = constraints;
+			}
 		}
 
 		rule.payload = compiled;

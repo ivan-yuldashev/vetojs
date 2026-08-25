@@ -97,7 +97,17 @@ export const compilePayloadConstraints = (
 	condition: unknown,
 ): FieldConditionNode<Row> => {
 	if (!isPlainObject(condition)) {
-		return everything<FieldConditionNode<Row>>();
+		throw new TypeError(
+			`veto: payload constraints take a field condition or "and", not ${typeof condition} — a constraint that compiles to nothing would silence the whole rule.`,
+		);
+	}
+
+	for (const shape of ["or", "not", "relation"]) {
+		if (shape in condition) {
+			throw new TypeError(
+				`veto: payload constraints take a field condition or "and" — "${shape}" is not one of them, and dropping it would silence the whole rule.`,
+			);
+		}
 	}
 
 	const nodes: FieldConditionNode<Row>[] = [];
