@@ -38,6 +38,24 @@ const unknownWhenPresent = (column: Column): SQL =>
 
 const totalize = (predicate: SQL): SQL => sql`coalesce(${predicate}, false)`;
 
+const NAN_CAPABLE = /^(numeric|decimal|real|double precision|float)/;
+
+const holdsNaN = (column: Column): boolean =>
+	NAN_CAPABLE.test(column.getSQLType());
+
+const unknownOnNaN = (column: Column, predicate: SQL): SQL =>
+	holdsNaN(column)
+		? sql`case when ${column} = 'NaN' then null::boolean else ${predicate} end`
+		: predicate;
+
+const unusable = (value: unknown): boolean => {
+	if (typeof value === "number") {
+		return Number.isNaN(value);
+	}
+
+	return value instanceof Date && Number.isNaN(value.getTime());
+};
+
 const escapeLike = (value: string): string => value.replace(/[\\%_]/g, "\\$&");
 
 const columnValue = (column: Column, value: unknown): unknown => {
@@ -101,6 +119,10 @@ const answersUnknown = (
 	op: ConditionOperator,
 	scalar: unknown,
 ): boolean => {
+	if (unusable(scalar)) {
+		return ORDERING.includes(op);
+	}
+
 	if (ORDERING.includes(op)) {
 		return (
 			!ORDERABLE_TYPES.includes(column.dataType) || !typeMatches(column, scalar)
@@ -161,6 +183,10 @@ const arrayMembership = (
 		);
 	}
 
+	if (members.some(unusable)) {
+		return FALSE;
+	}
+
 	if (members.length === 0) {
 		return op === ConditionOperator.HasAll ? isNotNull(column) : FALSE;
 	}
@@ -178,7 +204,8 @@ const membership = (
 	const members = membersOrThrow(column, raw, op);
 
 	const present = members.filter(
-		(member) => member !== null && typeMatches(column, member),
+		(member) =>
+			member !== null && typeMatches(column, member) && !unusable(member),
 	);
 
 	const hasNull = members.some((member) => member === null);
@@ -288,11 +315,13 @@ const compileField = (
 		return unknownWhenPresent(column);
 	}
 
-	if (!typeMatches(column, scalar)) {
+	if (unusable(scalar) || !typeMatches(column, scalar)) {
 		return op === ConditionOperator.NotEqual ? TRUE : FALSE;
 	}
 
-	return compare(column, scalar);
+	const predicate = compare(column, scalar);
+
+	return ORDERING.includes(op) ? unknownOnNaN(column, predicate) : predicate;
 };
 
 export type JoinPredicate = (parent: Table, child: Table) => SQL;
