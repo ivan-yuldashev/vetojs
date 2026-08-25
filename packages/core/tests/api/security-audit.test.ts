@@ -157,6 +157,25 @@ describe("security audit", () => {
 		).toBe(false);
 	});
 
+	it("F-N: NaN does not let both halves of an ordered deny step aside", () => {
+		const row: Txn = { id: "t", amount: Number.NaN };
+
+		const over = buildAbility(ac, [
+			allow("update", "txn"),
+			deny("update", "txn", { where: { amount: { gt: 1000 } } }),
+		]);
+
+		const under = buildAbility(ac, [
+			allow("update", "txn"),
+			deny("update", "txn", { where: { amount: { lte: 1000 } } }),
+		]);
+
+		expect([
+			over.can("update", "txn", row),
+			under.can("update", "txn", row),
+		]).not.toEqual([true, true]);
+	});
+
 	it("C: an ordered deny does not fire on an absent value (decidable non-match)", () => {
 		const ability = buildAbility(ac, [
 			allow("update", "txn"),
@@ -178,25 +197,6 @@ describe("security audit", () => {
 });
 
 describe("open findings — an it.fails turns red once the finding is fixed", () => {
-	it.fails("NaN does not let both halves of an ordered deny step aside", () => {
-		const row: Txn = { id: "t", amount: Number.NaN };
-
-		const over = buildAbility(ac, [
-			allow("update", "txn"),
-			deny("update", "txn", { where: { amount: { gt: 1000 } } }),
-		]);
-
-		const under = buildAbility(ac, [
-			allow("update", "txn"),
-			deny("update", "txn", { where: { amount: { lte: 1000 } } }),
-		]);
-
-		expect([
-			over.can("update", "txn", row),
-			under.can("update", "txn", row),
-		]).not.toEqual([true, true]);
-	});
-
 	it.fails("parseRules answers with a result for a resource named after a prototype member", () => {
 		const result = parseRules(
 			[{ effect: "allow", action: "update", resource: "constructor" }],
