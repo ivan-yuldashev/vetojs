@@ -232,6 +232,15 @@ describe("security audit", () => {
 		);
 	});
 
+	it("F-S: the rules an ability exposes are a snapshot of the policy", () => {
+		const policy = [allow("update", "txn")];
+		const ability = buildAbility(ac, policy);
+
+		policy.push(deny("update", "txn"));
+
+		expect(ability.rules).toHaveLength(1);
+	});
+
 	it("C: an ordered deny does not fire on an absent value (decidable non-match)", () => {
 		const ability = buildAbility(ac, [
 			allow("update", "txn"),
@@ -268,15 +277,6 @@ describe("open findings — an it.fails turns red once the finding is fixed", ()
 		}
 
 		expect(granted).toBe(false);
-	});
-
-	it.fails("the rules an ability exposes are a snapshot of the policy", () => {
-		const policy = [allow("update", "txn")];
-		const ability = buildAbility(ac, policy);
-
-		policy.push(deny("update", "txn"));
-
-		expect(ability.rules).toHaveLength(1);
 	});
 
 	it.fails("a validated payload does not carry __proto__ through as a field", () => {
