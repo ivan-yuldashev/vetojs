@@ -15,6 +15,7 @@ import {
 	widenCondition,
 } from "./compile.js";
 import { deriveJoinFromForeignKeys } from "./foreign-key-join.js";
+import { own } from "./own.js";
 import type { DrizzleSchema, JoinsFor, TableMap } from "./schema.types.js";
 
 type WideJoins = Partial<
@@ -122,7 +123,7 @@ export const defineTables = <AC extends ResourceMap, M extends TableMap<AC>>(
 	const resolvedJoins = resolveJoins(ac, byResource, joins as WideJoins);
 
 	const tableOrThrow = (resource: string, subject: string): PgTable => {
-		const table = byResource[resource];
+		const table = own(byResource, resource);
 
 		if (table === null) {
 			throw new Error(
@@ -143,8 +144,8 @@ export const defineTables = <AC extends ResourceMap, M extends TableMap<AC>>(
 		from: string | undefined,
 		relation: string,
 	): Omit<RelationTarget, "alias"> => {
-		const meta =
-			from === undefined ? undefined : ac[from]?.relations?.[relation];
+		const declared = from === undefined ? undefined : own(ac, from);
+		const meta = own(declared?.relations, relation);
 
 		if (meta === undefined) {
 			throw new Error(

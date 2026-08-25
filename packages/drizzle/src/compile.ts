@@ -30,6 +30,7 @@ import {
 	type Table,
 } from "drizzle-orm";
 import { alias, type PgTable, QueryBuilder } from "drizzle-orm/pg-core";
+import { own } from "./own.js";
 
 const TRUE = sql`true`;
 const FALSE = sql`false`;
@@ -421,7 +422,7 @@ const compileNode = (
 		return compileRelation(node, frame, env);
 	}
 
-	const column = frame.columns[node.field];
+	const column = own(frame.columns, node.field);
 
 	if (column === undefined) {
 		const where =

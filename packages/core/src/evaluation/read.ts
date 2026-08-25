@@ -1,9 +1,14 @@
 import { RelationNotLoadedError } from "../errors/index.js";
-import { FOREIGN_KEY_TYPES, isPlainObject, type Row } from "../shared/index.js";
+import {
+	FOREIGN_KEY_TYPES,
+	isPlainObject,
+	own,
+	type Row,
+} from "../shared/index.js";
 import { isLoaded } from "./loaded.js";
 
 export const ownField = (instance: Row, key: string): unknown => {
-	return Object.hasOwn(instance, key) ? instance[key] : undefined;
+	return own(instance, key);
 };
 
 export type Related = { items: Row[]; asList: boolean };

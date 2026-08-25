@@ -12,7 +12,7 @@ import {
 	walkReaches,
 } from "../evaluation/index.js";
 import type { ConditionNode } from "../model/index.js";
-import { isPlainObject, type Row } from "../shared/index.js";
+import { isPlainObject, own, type Row } from "../shared/index.js";
 import type { AbilityOptions, AbilitySet } from "./ability.types.js";
 import type { CheckedRules } from "./checked-rules.types.js";
 import type { ResourceMap } from "./define-abilities.js";
@@ -212,7 +212,7 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 			);
 		},
 		validate: (resource: string, data: unknown): ValidateResult<Row> => {
-			const definition = registry[resource];
+			const definition = own(registry, resource);
 
 			return definition === undefined
 				? {

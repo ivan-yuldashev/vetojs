@@ -5,6 +5,7 @@ import {
 	isPlainObject,
 	MANAGE_ACTION,
 	MATCH_QUANTIFIERS,
+	own,
 	RELATION_KINDS,
 	RelationKind,
 	type Row,
@@ -336,7 +337,8 @@ const conditionVocabularyReasons = (
 	}
 
 	if ("relation" in node) {
-		const relation = vocabulary[resource]?.relations?.[node.relation];
+		const declared = own(vocabulary, resource);
+		const relation = own(declared?.relations, node.relation);
 
 		if (relation === undefined) {
 			reasons.push(
@@ -352,7 +354,7 @@ const conditionVocabularyReasons = (
 			return;
 		}
 
-		if (vocabulary[relation.resource] === undefined) {
+		if (own(vocabulary, relation.resource) === undefined) {
 			reasons.push(
 				`${path}: relation "${node.relation}" targets unknown resource "${relation.resource}"`,
 			);
@@ -378,7 +380,7 @@ const vocabularyReasons = (
 	path: string,
 ): string[] => {
 	const reasons: string[] = [];
-	const definition = vocabulary[rule.resource];
+	const definition = own(vocabulary, rule.resource);
 
 	if (definition === undefined) {
 		reasons.push(`${path}.resource: unknown resource "${rule.resource}"`);

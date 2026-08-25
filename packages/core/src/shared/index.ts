@@ -15,3 +15,4 @@ export type { Row } from "./types/row.js";
 export { isOperator } from "./utils/isOperator.js";
 export { isPayloadScoped } from "./utils/isPayloadScoped.js";
 export { isPlainObject } from "./utils/isPlainObject.js";
+export { own } from "./utils/own.js";

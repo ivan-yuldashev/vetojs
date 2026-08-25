@@ -176,6 +176,21 @@ describe("security audit", () => {
 		]).not.toEqual([true, true]);
 	});
 
+	it("F-P: parseRules answers with a result for a resource named after a prototype member", () => {
+		const result = parseRules(
+			[{ effect: "allow", action: "update", resource: "constructor" }],
+			toVocabulary(ac),
+		);
+
+		expect(result.ok && result.unknown).toHaveLength(1);
+	});
+
+	it("F-P: validate rejects a resource named after a prototype member", () => {
+		expect(
+			buildAbility(ac, []).validate("constructor" as never, { id: "u" }).ok,
+		).toBe(false);
+	});
+
 	it("C: an ordered deny does not fire on an absent value (decidable non-match)", () => {
 		const ability = buildAbility(ac, [
 			allow("update", "txn"),
@@ -197,21 +212,6 @@ describe("security audit", () => {
 });
 
 describe("open findings — an it.fails turns red once the finding is fixed", () => {
-	it.fails("parseRules answers with a result for a resource named after a prototype member", () => {
-		const result = parseRules(
-			[{ effect: "allow", action: "update", resource: "constructor" }],
-			toVocabulary(ac),
-		);
-
-		expect(result.ok && result.unknown).toHaveLength(1);
-	});
-
-	it.fails("validate rejects a resource named after a prototype member", () => {
-		expect(
-			buildAbility(ac, []).validate("constructor" as never, { id: "u" }).ok,
-		).toBe(false);
-	});
-
 	it.fails("a polluted Object.prototype.and leaves conditions decidable", () => {
 		const scoped = allow("update", "user", { where: { role: "admin" } });
 		let granted: boolean;
