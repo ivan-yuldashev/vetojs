@@ -1,9 +1,10 @@
 import type { Row } from "../shared/index.js";
+import { owns } from "../shared/index.js";
 
 const LOADED = Symbol.for("veto:loaded");
 
 const loadedRelationNames = (instance: Row): Set<string> | undefined => {
-	if (!Object.hasOwn(instance, LOADED)) {
+	if (!owns(instance, LOADED)) {
 		return undefined;
 	}
 

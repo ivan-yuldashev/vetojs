@@ -12,6 +12,7 @@ import {
 	type ConditionOperator,
 	isPayloadScoped,
 	isPlainObject,
+	owns,
 	type Row,
 	RuleEffect,
 } from "../shared/index.js";
@@ -84,7 +85,7 @@ type FieldConstraint = {
 const fieldConstraints = <T extends Row>(
 	constraint: ConditionNode<T>,
 ): FieldConstraint[] | null => {
-	if ("and" in constraint) {
+	if (owns(constraint, "and")) {
 		const collected: FieldConstraint[] = [];
 
 		for (const child of constraint.and) {
@@ -100,7 +101,7 @@ const fieldConstraints = <T extends Row>(
 		return collected;
 	}
 
-	if ("field" in constraint && typeof constraint.field === "string") {
+	if (owns(constraint, "field") && typeof constraint.field === "string") {
 		return [
 			{
 				field: constraint.field,

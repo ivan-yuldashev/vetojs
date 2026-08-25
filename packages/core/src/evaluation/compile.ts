@@ -1,5 +1,10 @@
 import type { ConditionNode } from "../model/index.js";
-import { MatchQuantifier, RelationKind, type Row } from "../shared/index.js";
+import {
+	MatchQuantifier,
+	owns,
+	RelationKind,
+	type Row,
+} from "../shared/index.js";
 import { evaluateOperator } from "./operator.js";
 import { ownField, relatedOf } from "./read.js";
 import {
@@ -12,19 +17,19 @@ import {
 export type Matcher = (instance: Row) => Verdict;
 
 const walkForRelation = <T extends Row>(node: ConditionNode<T>): boolean => {
-	if ("relation" in node) {
+	if (owns(node, "relation")) {
 		return true;
 	}
 
-	if ("and" in node) {
+	if (owns(node, "and")) {
 		return node.and.some(walkForRelation);
 	}
 
-	if ("or" in node) {
+	if (owns(node, "or")) {
 		return node.or.some(walkForRelation);
 	}
 
-	if ("not" in node) {
+	if (owns(node, "not")) {
 		return walkForRelation(node.not);
 	}
 
@@ -56,7 +61,7 @@ const compileRelation = <T extends Row>(
 	const relation = node.relation;
 	const inner = compile(node.where, visitAll);
 	const one = node.type === RelationKind.One;
-	const quantifier = "match" in node ? node.match : undefined;
+	const quantifier = owns(node, "match") ? node.match : undefined;
 	const everyItem = touchesRelation(node.where);
 
 	return (instance) => {
@@ -91,7 +96,7 @@ const compile = <T extends Row>(
 	node: ConditionNode<T>,
 	visitAll: boolean,
 ): Matcher => {
-	if ("and" in node) {
+	if (owns(node, "and")) {
 		const children = node.and.map((child) => compile(child, visitAll));
 
 		return (instance) => {
@@ -118,7 +123,7 @@ const compile = <T extends Row>(
 		};
 	}
 
-	if ("or" in node) {
+	if (owns(node, "or")) {
 		const children = node.or.map((child) => compile(child, visitAll));
 
 		return (instance) => {
@@ -145,14 +150,18 @@ const compile = <T extends Row>(
 		};
 	}
 
-	if ("not" in node) {
+	if (owns(node, "not")) {
 		const inner = compile(node.not, visitAll);
 
 		return (instance) => kleeneNot(inner(instance));
 	}
 
-	if ("relation" in node) {
+	if (owns(node, "relation")) {
 		return compileRelation(node, visitAll);
+	}
+
+	if (!owns(node, "field") || !("field" in node)) {
+		return () => undefined;
 	}
 
 	const { op, value } = node;

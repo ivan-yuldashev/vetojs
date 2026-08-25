@@ -3,6 +3,7 @@ import {
 	ConditionOperator,
 	isOperator,
 	isPlainObject,
+	owns,
 	type Row,
 } from "../shared/index.js";
 import { everything } from "./vacuous.js";
@@ -120,7 +121,7 @@ export const compilePayloadConstraints = (
 
 	const nodes: FieldConditionNode<Row>[] = [];
 
-	if ("and" in condition && Array.isArray(condition.and)) {
+	if (owns(condition, "and") && Array.isArray(condition.and)) {
 		nodes.push({ and: condition.and.map(compilePayloadConstraints) });
 	}
 

@@ -6,6 +6,7 @@ import {
 	MANAGE_ACTION,
 	MATCH_QUANTIFIERS,
 	own,
+	owns,
 	RELATION_KINDS,
 	RelationKind,
 	type Row,
@@ -58,7 +59,7 @@ const validateFieldNode = (node: Row, path: string, errors: string[]): void => {
 		errors.push(`${path}.op: unknown operator ${JSON.stringify(node.op)}`);
 	}
 
-	if (!("value" in node)) {
+	if (!owns(node, "value")) {
 		errors.push(`${path}.value: missing`);
 		return;
 	}
@@ -107,7 +108,7 @@ const validateRelationCardinality = (
 
 	if (
 		node.type === RelationKind.One &&
-		"match" in node &&
+		owns(node, "match") &&
 		node.match !== undefined
 	) {
 		errors.push(`${path}.match: a to-one relation must not carry a match`);
@@ -132,7 +133,7 @@ const validateRelation = (
 
 	validateRelationCardinality(node, path, errors);
 
-	if (!("where" in node)) {
+	if (!owns(node, "where")) {
 		errors.push(`${path}.where: missing`);
 		return;
 	}
@@ -162,7 +163,7 @@ const shapeOf = (
 	path: string,
 	errors: string[],
 ): ConditionShape | undefined => {
-	const named = CONDITION_SHAPES.filter((shape) => shape in node);
+	const named = CONDITION_SHAPES.filter((shape) => owns(node, shape));
 
 	if (named.length > 1) {
 		errors.push(
@@ -252,14 +253,14 @@ const validatePayload = (
 	}
 
 	if (
-		"fields" in payload &&
+		owns(payload, "fields") &&
 		payload.fields !== undefined &&
 		!isStringArray(payload.fields)
 	) {
 		errors.push(`${path}.fields: expected an array of strings`);
 	}
 
-	if ("constraints" in payload && payload.constraints !== undefined) {
+	if (owns(payload, "constraints") && payload.constraints !== undefined) {
 		walkCondition(
 			payload.constraints,
 			`${path}.constraints`,
@@ -288,11 +289,11 @@ const validateRule = (rule: unknown, path: string, errors: string[]): void => {
 		errors.push(`${path}.resource: expected a string`);
 	}
 
-	if ("where" in rule && rule.where !== undefined) {
+	if (owns(rule, "where") && rule.where !== undefined) {
 		walkCondition(rule.where, `${path}.where`, errors, 0, conditionGrammar());
 	}
 
-	if ("payload" in rule && rule.payload !== undefined) {
+	if (owns(rule, "payload") && rule.payload !== undefined) {
 		validatePayload(rule.payload, `${path}.payload`, errors);
 	}
 };
@@ -304,7 +305,7 @@ const conditionVocabularyReasons = (
 	path: string,
 	reasons: string[],
 ): void => {
-	if ("and" in node) {
+	if (owns(node, "and")) {
 		for (const [index, child] of node.and.entries()) {
 			conditionVocabularyReasons(
 				child,
@@ -317,7 +318,7 @@ const conditionVocabularyReasons = (
 		return;
 	}
 
-	if ("or" in node) {
+	if (owns(node, "or")) {
 		for (const [index, child] of node.or.entries()) {
 			conditionVocabularyReasons(
 				child,
@@ -330,7 +331,7 @@ const conditionVocabularyReasons = (
 		return;
 	}
 
-	if ("not" in node) {
+	if (owns(node, "not")) {
 		conditionVocabularyReasons(
 			node.not,
 			resource,
@@ -341,7 +342,7 @@ const conditionVocabularyReasons = (
 		return;
 	}
 
-	if ("relation" in node) {
+	if (owns(node, "relation")) {
 		const declared = own(vocabulary, resource);
 		const relation = own(declared?.relations, node.relation);
 
@@ -375,8 +376,6 @@ const conditionVocabularyReasons = (
 		);
 		return;
 	}
-
-	node satisfies { field: unknown };
 };
 
 const vocabularyReasons = (

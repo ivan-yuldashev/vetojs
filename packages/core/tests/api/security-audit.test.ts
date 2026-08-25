@@ -255,6 +255,23 @@ describe("security audit", () => {
 		expect(result.ok).toBe(false);
 	});
 
+	it("F-Y: a polluted Object.prototype.and leaves conditions decidable", () => {
+		const scoped = allow("update", "user", { where: { role: "admin" } });
+		let granted: boolean;
+
+		(Object.prototype as Record<string, unknown>).and = [];
+		try {
+			granted = buildAbility(ac, [scoped]).can("update", "user", {
+				id: "u",
+				role: "guest",
+			});
+		} finally {
+			delete (Object.prototype as Record<string, unknown>).and;
+		}
+
+		expect(granted).toBe(false);
+	});
+
 	it("C: an ordered deny does not fire on an absent value (decidable non-match)", () => {
 		const ability = buildAbility(ac, [
 			allow("update", "txn"),
@@ -272,24 +289,5 @@ describe("security audit", () => {
 				amount: "5000",
 			} as unknown as Txn),
 		).toBe(false);
-	});
-});
-
-describe("open findings — an it.fails turns red once the finding is fixed", () => {
-	it.fails("a polluted Object.prototype.and leaves conditions decidable", () => {
-		const scoped = allow("update", "user", { where: { role: "admin" } });
-		let granted: boolean;
-
-		(Object.prototype as Record<string, unknown>).and = [];
-		try {
-			granted = buildAbility(ac, [scoped]).can("update", "user", {
-				id: "u",
-				role: "guest",
-			});
-		} finally {
-			delete (Object.prototype as Record<string, unknown>).and;
-		}
-
-		expect(granted).toBe(false);
 	});
 });

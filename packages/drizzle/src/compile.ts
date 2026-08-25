@@ -31,6 +31,7 @@ import {
 } from "drizzle-orm";
 import { alias, type PgTable, QueryBuilder } from "drizzle-orm/pg-core";
 import { own } from "./own.js";
+import { owns } from "./owns.js";
 
 const TRUE = sql`true`;
 const FALSE = sql`false`;
@@ -410,22 +411,28 @@ const compileNode = (
 	frame: Frame,
 	env: CompileEnv,
 ): SQL => {
-	if ("and" in node) {
+	if (owns(node, "and")) {
 		const parts = node.and.map((child) => compileNode(child, frame, env));
 		return and(...parts) ?? TRUE;
 	}
 
-	if ("or" in node) {
+	if (owns(node, "or")) {
 		const parts = node.or.map((child) => compileNode(child, frame, env));
 		return or(...parts) ?? FALSE;
 	}
 
-	if ("not" in node) {
+	if (owns(node, "not")) {
 		return not(compileNode(node.not, frame, env));
 	}
 
-	if ("relation" in node) {
+	if (owns(node, "relation")) {
 		return compileRelation(node, frame, env);
+	}
+
+	if (!owns(node, "field") || !("field" in node)) {
+		throw new Error(
+			`@vetojs/drizzle: a condition on table "${getTableName(frame.table)}" names no shape the engine knows — it is neither a field, a relation, nor and/or/not.`,
+		);
 	}
 
 	const column = own(frame.columns, node.field);
