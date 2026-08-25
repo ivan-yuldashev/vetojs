@@ -12,7 +12,12 @@ import {
 	walkReaches,
 } from "../evaluation/index.js";
 import type { ConditionNode } from "../model/index.js";
-import { isPlainObject, own, type Row } from "../shared/index.js";
+import {
+	isPlainObject,
+	MANAGE_ACTION,
+	own,
+	type Row,
+} from "../shared/index.js";
 import type { AbilityOptions, AbilitySet } from "./ability.types.js";
 import type { CheckedRules } from "./checked-rules.types.js";
 import type { ResourceMap } from "./define-abilities.js";
@@ -25,6 +30,13 @@ import { compileWhere } from "./where.js";
 export type { AbilitySet } from "./ability.types.js";
 
 type Narrowed = Prepared & { rules: CheckedRules; reaches: Reach[] };
+
+const NOTHING: Narrowed = {
+	rules: [],
+	grantIsFinal: true,
+	reaches: [],
+	matchers: [],
+};
 
 /**
  * Turns a policy into the object you call.
@@ -53,15 +65,17 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 	const policy = [...rules];
 	const buckets = new Map<string, Map<string, Narrowed>>();
 
-	const relevant = (action: string, resource: string): Narrowed => {
-		let byAction = buckets.get(resource);
-
-		if (byAction === undefined) {
-			byAction = new Map();
-			buckets.set(resource, byAction);
+	const declared = (action: string, resource: string): boolean => {
+		if (action === MANAGE_ACTION) {
+			return true;
 		}
 
-		const known = byAction.get(action);
+		return own(registry, resource)?.actions.includes(action) ?? false;
+	};
+
+	const relevant = (action: string, resource: string): Narrowed => {
+		const byAction = buckets.get(resource);
+		const known = byAction?.get(action);
 
 		if (known !== undefined) {
 			return known;
@@ -69,18 +83,31 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 
 		const only = policy.filter((rule) => ruleMatches(rule, action, resource));
 
-		const narrowed: Narrowed = {
-			rules: only,
-			grantIsFinal: !only.some(prohibitsRow),
-			reaches: reachesOf(
-				only.flatMap((rule) => (rule.where === undefined ? [] : [rule.where])),
-			),
-			matchers: only.map((rule) =>
-				rule.where === undefined ? undefined : matcherFor(rule.where),
-			),
-		};
+		const narrowed: Narrowed =
+			only.length === 0
+				? NOTHING
+				: {
+						rules: only,
+						grantIsFinal: !only.some(prohibitsRow),
+						reaches: reachesOf(
+							only.flatMap((rule) =>
+								rule.where === undefined ? [] : [rule.where],
+							),
+						),
+						matchers: only.map((rule) =>
+							rule.where === undefined ? undefined : matcherFor(rule.where),
+						),
+					};
 
-		byAction.set(action, narrowed);
+		if (!declared(action, resource)) {
+			return narrowed;
+		}
+
+		if (byAction === undefined) {
+			buckets.set(resource, new Map([[action, narrowed]]));
+		} else {
+			byAction.set(action, narrowed);
+		}
 
 		return narrowed;
 	};
