@@ -70,6 +70,11 @@ const validateFieldNode = (node: Row, path: string, errors: string[]): void => {
 		return;
 	}
 
+	if (node.op === ConditionOperator.Exists && typeof node.value !== "boolean") {
+		errors.push(`${path}.value: expected a boolean for "exists"`);
+		return;
+	}
+
 	const needsArray =
 		node.op === ConditionOperator.In ||
 		node.op === ConditionOperator.NotIn ||

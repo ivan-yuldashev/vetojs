@@ -22,7 +22,7 @@ allow("read", "post", { where: { status: { in: ["draft", "review"] } } });
 | `nin` | the value is not in the list | |
 | `gt` `gte` `lt` `lte` | ordered comparison | numbers, bigints, dates, or strings |
 | `contains` | the string contains the substring | string-only, case-sensitive |
-| `exists` | presence matches what you asked for | `exists: true` means not `null`/`undefined`; `0`, `false` and `""` count as present |
+| `exists` | presence matches what you asked for | takes `true` or `false`, nothing else; `exists: true` means not `null`/`undefined`, so `0`, `false` and `""` count as present |
 | `has` | the array contains the element | array-of-scalars fields only |
 | `hasAny` | the array contains at least one of the list | shorthand for `or` over `has` |
 | `hasAll` | the array contains every one of the list | shorthand for `and` over `has`; an empty list asks nothing of the elements, so any array satisfies it — an absent field still does not |

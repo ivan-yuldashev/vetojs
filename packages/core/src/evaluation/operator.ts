@@ -202,7 +202,9 @@ export const evaluateOperator = (
 		case ConditionOperator.Contains:
 			return containsVerdict(actual, expected);
 		case ConditionOperator.Exists:
-			return isPresent(actual) === Boolean(expected);
+			return typeof expected === "boolean"
+				? isPresent(actual) === expected
+				: undefined;
 		case ConditionOperator.Has:
 			return overElements(actual, (elements) =>
 				memberVerdict(expected, elements),
