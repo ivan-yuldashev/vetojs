@@ -236,7 +236,7 @@ describe("every answer reaches the hook", () => {
 	});
 
 	describe("on data that is not a row at all", () => {
-		it("reports the refusal without naming a rule", () => {
+		it("reports the refusal, naming no rule but saying why", () => {
 			const { seen, ability } = watch([allow("read", "post")]);
 
 			expect(ability.can("read", "post", "not a row" as unknown as Post)).toBe(
@@ -246,6 +246,7 @@ describe("every answer reaches the hook", () => {
 				action: "read",
 				resource: "post",
 				allowed: false,
+				reason: "not a plain row",
 			});
 		});
 	});
