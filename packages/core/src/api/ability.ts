@@ -1,10 +1,18 @@
 import { ForbiddenError } from "../errors/index.js";
 import {
 	evaluateRules,
+	matcherFor,
 	mightAllow,
+	type Prepared,
+	prohibitsRow,
+	type Reach,
+	reachesOf,
+	ruleMatches,
 	type Settled,
+	walkReaches,
 } from "../evaluation/index.js";
 import type { ConditionNode } from "../model/index.js";
+import { isPlainObject, type Row } from "../shared/index.js";
 import type { AbilityOptions, AbilitySet } from "./ability.types.js";
 import type { CheckedRules } from "./checked-rules.types.js";
 import type { ResourceMap } from "./define-abilities.js";
@@ -16,12 +24,17 @@ import { compileWhere } from "./where.js";
 
 export type { AbilitySet } from "./ability.types.js";
 
+type Narrowed = Prepared & { rules: CheckedRules; reaches: Reach[] };
+
 /**
  * Turns a policy into the object you call.
  *
  * Accepts only rules that provably passed a check — from {@link createRules} (verified by
  * the compiler) or {@link parseRules} with a vocabulary (verified at runtime), so the
  * validation step for rules arriving from a database or the network cannot be skipped.
+ *
+ * The policy is read once, here. Changing the array or the rule objects afterwards does not
+ * change the answers — build again for a policy that changed.
  *
  * @param registry - your {@link defineAbilities} declarations
  * @param rules - the policy for one actor
@@ -37,11 +50,52 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 ): AbilitySet<AC> => {
 	const report = options?.onDecision;
 
+	const policy = [...rules];
+	const buckets = new Map<string, Map<string, Narrowed>>();
+
+	const relevant = (action: string, resource: string): Narrowed => {
+		let byAction = buckets.get(resource);
+
+		if (byAction === undefined) {
+			byAction = new Map();
+			buckets.set(resource, byAction);
+		}
+
+		const known = byAction.get(action);
+
+		if (known !== undefined) {
+			return known;
+		}
+
+		const only = policy.filter((rule) => ruleMatches(rule, action, resource));
+
+		const narrowed: Narrowed = {
+			rules: only,
+			grantIsFinal: !only.some(prohibitsRow),
+			reaches: reachesOf(
+				only.flatMap((rule) => (rule.where === undefined ? [] : [rule.where])),
+			),
+			matchers: only.map((rule) =>
+				rule.where === undefined ? undefined : matcherFor(rule.where),
+			),
+		};
+
+		byAction.set(action, narrowed);
+
+		return narrowed;
+	};
+
+	const sound = (only: Narrowed, instance: unknown): void => {
+		if (only.reaches.length > 0 && isPlainObject<Row>(instance)) {
+			walkReaches(only.reaches, instance);
+		}
+	};
+
 	const answer = (
 		action: string,
 		resource: string,
 		allowed: boolean,
-		settled: Settled<Record<string, unknown>>,
+		settled: Settled<Row>,
 	): boolean => {
 		report?.(
 			settled.rule === undefined
@@ -57,20 +111,31 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 		resource: string,
 		instance?: unknown,
 	): boolean => {
+		const only = relevant(action, resource);
+
+		sound(only, instance);
+
 		if (report === undefined) {
 			return instance === undefined
-				? mightAllow(rules, action, resource)
-				: evaluateRules(rules, action, resource, instance);
+				? mightAllow(only.rules, action, resource)
+				: evaluateRules(
+						only.rules,
+						action,
+						resource,
+						instance,
+						undefined,
+						only,
+					);
 		}
 
-		const settled: Settled<Record<string, unknown>> = {};
+		const settled: Settled<Row> = {};
 
 		return answer(
 			action,
 			resource,
 			instance === undefined
-				? mightAllow(rules, action, resource, settled)
-				: evaluateRules(rules, action, resource, instance, settled),
+				? mightAllow(only.rules, action, resource, settled)
+				: evaluateRules(only.rules, action, resource, instance, settled, only),
 			settled,
 		);
 	};
@@ -78,24 +143,29 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 	const core = {
 		rules,
 		can: decide,
-		cannot: (action: string, resource: string, instance?: unknown): boolean =>
-			!decide(action, resource, instance),
+		cannot: (action: string, resource: string, instance?: unknown): boolean => {
+			return !decide(action, resource, instance);
+		},
 		authorize: (action: string, resource: string, instance?: unknown): void => {
 			if (!decide(action, resource, instance)) {
 				throw new ForbiddenError(action, resource);
 			}
 		},
 		canMutate: (action: string, resource: string, row: unknown): boolean => {
+			const only = relevant(action, resource);
+
+			sound(only, row);
+
 			if (report === undefined) {
-				return canMutate(rules, action, resource, row);
+				return canMutate(only.rules, action, resource, row);
 			}
 
-			const settled: Settled<Record<string, unknown>> = {};
+			const settled: Settled<Row> = {};
 
 			return answer(
 				action,
 				resource,
-				canMutate(rules, action, resource, row, settled),
+				canMutate(only.rules, action, resource, row, settled),
 				settled,
 			);
 		},
@@ -104,8 +174,14 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 			resource: string,
 			row: unknown,
 			data: unknown,
-		): PayloadResult<Record<string, unknown>> => {
-			const result = validatePayload(rules, action, resource, row, data);
+		): PayloadResult<Row> => {
+			const result = validatePayload(
+				relevant(action, resource).rules,
+				action,
+				resource,
+				row,
+				data,
+			);
 
 			report?.(
 				result.ok
@@ -120,21 +196,24 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 
 			return result;
 		},
-		where: (
-			action: string,
-			resource: string,
-		): ConditionNode<Record<string, unknown>> =>
-			compileWhere(rules, action, resource),
+		where: (action: string, resource: string): ConditionNode<Row> => {
+			return compileWhere(relevant(action, resource).rules, action, resource);
+		},
 		permittedFields: (
 			action: string,
 			resource: string,
 			fields: string[],
-		): string[] => permittedFields(rules, action, resource, fields),
-		validate: (
-			resource: string,
-			data: unknown,
-		): ValidateResult<Record<string, unknown>> => {
+		): string[] => {
+			return permittedFields(
+				relevant(action, resource).rules,
+				action,
+				resource,
+				fields,
+			);
+		},
+		validate: (resource: string, data: unknown): ValidateResult<Row> => {
 			const definition = registry[resource];
+
 			return definition === undefined
 				? {
 						ok: false,

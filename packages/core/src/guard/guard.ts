@@ -3,7 +3,12 @@ import { buildAbility } from "../api/index.js";
 import { ForbiddenError } from "../errors/index.js";
 import { ruleMatches } from "../evaluation/index.js";
 import type { Rule } from "../model/index.js";
-import { isPayloadScoped, isPlainObject, RuleEffect } from "../shared/index.js";
+import {
+	isPayloadScoped,
+	isPlainObject,
+	type Row,
+	RuleEffect,
+} from "../shared/index.js";
 import type {
 	GuardConfig,
 	GuardOptions,
@@ -27,8 +32,8 @@ const mutationRowAllowed = (
 	ability: AbilitySet,
 	action: string,
 	resource: string,
-	row: Record<string, unknown> | undefined,
-	base: Record<string, unknown>,
+	row: Row | undefined,
+	base: Row,
 ): boolean => {
 	if (row === undefined) {
 		return !hasMatchingDeny(ability.rules, action, resource);
@@ -60,9 +65,9 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 		ability: AbilitySet,
 		action: string,
 		resource: string,
-		row: Record<string, unknown> | undefined,
-		payload: Record<string, unknown>,
-	): Record<string, unknown> => {
+		row: Row | undefined,
+		payload: Row,
+	): Row => {
 		const base = row ?? {};
 
 		if (!mutationRowAllowed(ability, action, resource, row, base)) {
@@ -82,9 +87,9 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 		ability: AbilitySet,
 		action: string,
 		resource: string,
-		row: Record<string, unknown> | undefined,
-		payload: Record<string, unknown> | undefined,
-	): Record<string, unknown> | undefined => {
+		row: Row | undefined,
+		payload: Row | undefined,
+	): Row | undefined => {
 		if (payload !== undefined) {
 			return authorizeMutation(ability, action, resource, row, payload);
 		}
@@ -124,12 +129,12 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 					: { onDecision: (decision) => watch(decision, actor) },
 			);
 
-			let row: Record<string, unknown> | undefined;
+			let row: Row | undefined;
 
 			if (options.load) {
 				const loaded = await options.load(...args);
 
-				if (!isPlainObject<Record<string, unknown>>(loaded)) {
+				if (!isPlainObject<Row>(loaded)) {
 					watch?.(
 						{ action, resource, allowed: false, reason: "no row" },
 						actor,

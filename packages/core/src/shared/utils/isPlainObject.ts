@@ -1,6 +1,6 @@
-export const isPlainObject = <T extends Record<string, unknown>>(
-	value: unknown,
-): value is T => {
+import type { Row } from "../types/row.js";
+
+export const isPlainObject = <T extends Row>(value: unknown): value is T => {
 	if (typeof value !== "object" || value === null) {
 		return false;
 	}
