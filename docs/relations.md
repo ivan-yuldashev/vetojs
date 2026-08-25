@@ -52,7 +52,18 @@ The engine reads the same convention your ORM already follows:
 | a string / number / bigint | you selected ids, not rows | **throws** — the relation isn't really loaded |
 | anything else | corrupt data | unknown → an allow grants nothing, a deny fires |
 
-So with Prisma, Drizzle or TypeORM it just works: `include`/`with` gives you objects or `null`, and a relation you didn't ask for is `undefined`.
+Prisma, Drizzle and TypeORM all follow it: `include`/`with` gives you objects or `null`, and a relation you didn't ask for is `undefined`.
+
+What the engine reads is plain data — an object whose prototype is `Object.prototype`, or none at all. Prisma and Drizzle hand you exactly that. TypeORM hands you entity **class instances**, and a check on one answers no: the engine does not read fields through a prototype it doesn't know. Spread the entity on the way in:
+
+```ts
+const entity = await repository.findOne({
+	where: { id: postId },
+	relations: { author: true },
+});
+
+ability.can("read", "post", { ...entity });
+```
 
 ```ts
 const post = await db.query.posts.findFirst({
