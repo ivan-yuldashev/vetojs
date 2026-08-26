@@ -8,7 +8,7 @@ import {
 	type Rule,
 	shape,
 } from "@vetojs/core";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import {
 	customType,
 	integer,
@@ -485,6 +485,138 @@ describe("toDrizzle — edge semantics", () => {
 			const visible = await expectIdentity(raw("id", "ne", "draft"));
 			expect(visible).not.toContain("draft");
 			expect(visible).toHaveLength(rows.length - 1);
+		});
+
+		describe("the same mismatch under a deny, where SQL must not negate it away", () => {
+			const vetoed = (field: string, op: string, value: unknown): Rule[] => [
+				{ effect: "allow", action: "read", resource: "post" },
+				{
+					effect: "deny",
+					action: "read",
+					resource: "post",
+					where: { field, op: op as never, value },
+				},
+			];
+
+			const mismatches: [string, string, unknown][] = [
+				["views", "eq", "200"],
+				["views", "ne", "200"],
+				["views", "gt", "100"],
+				["views", "gte", "100"],
+				["views", "lt", "100"],
+				["views", "lte", "100"],
+				["views", "contains", "0"],
+				["views", "in", [200, "10"]],
+				["status", "eq", 200],
+				["status", "gt", 200],
+				["publishedAt", "gt", "2026-01-01"],
+				["publishedAt", "lte", "2026-01-01"],
+				["id", "gt", 5],
+				["tag", "contains", "x"],
+				["labels", "contains", "x"],
+			];
+
+			for (const [field, op, value] of mismatches) {
+				it(`${op} on ${field} agrees with the engine, allowed or denied`, async () => {
+					await expectIdentity(raw(field, op, value));
+					await expectIdentity(vetoed(field, op, value));
+				});
+			}
+
+			it("leaves only the rows the engine still allows, never the whole table", async () => {
+				const ability = buildAbility(
+					ac,
+					vetoed("views", "gt", "100") as CheckedRules,
+				);
+
+				const allowed = rows
+					.filter((row) => ability.can("read", "post", row))
+					.map((row) => row.id);
+
+				expect(allowed.length).toBeLessThan(rows.length);
+				expect(await expectIdentity(vetoed("views", "gt", "100"))).toEqual(
+					allowed.sort(),
+				);
+			});
+
+			it("ordering a custom column with a value it cannot encode fails loudly, not widely", async () => {
+				const ability = buildAbility(
+					ac,
+					vetoed("tag", "gt", 5) as CheckedRules,
+				);
+				const filter = toDrizzle(ability.where("read", "post"), posts);
+
+				await expect(
+					db.select({ id: posts.id }).from(posts).where(filter),
+				).rejects.toThrow();
+			});
+
+			it("an ordering rule the engine can decide still compiles to a comparison", async () => {
+				const visible = await expectIdentity(vetoed("views", "gt", 100));
+
+				expect(visible.length).toBeGreaterThan(0);
+				expect(visible).not.toContain("published");
+			});
+		});
+	});
+
+	describe("open findings — an it.fails turns red once the finding is fixed", () => {
+		const vetoed = (field: string, op: string, value: unknown): Rule[] => [
+			{ effect: "allow", action: "read", resource: "post" },
+			{
+				effect: "deny",
+				action: "read",
+				resource: "post",
+				where: { field, op: op as never, value },
+			},
+		];
+
+		const refusedOrFaithful = async (rules: Rule[]): Promise<boolean> => {
+			const ability = buildAbility(ac, rules as CheckedRules);
+			const engineVisible = rows
+				.filter((row) => ability.can("read", "post", row))
+				.map((row) => row.id)
+				.sort();
+
+			let filter: SQL;
+
+			try {
+				filter = toDrizzle(ability.where("read", "post"), posts);
+			} catch {
+				return true;
+			}
+
+			const selected = await db
+				.select({ id: posts.id })
+				.from(posts)
+				.where(filter);
+
+			return (
+				selected
+					.map((row) => row.id)
+					.sort()
+					.join() === engineVisible.join()
+			);
+		};
+
+		it("gt: a deny carrying a string against an int column never widens the query", async () => {
+			expect(await refusedOrFaithful(vetoed("views", "gt", "100"))).toBe(true);
+		});
+
+		it("gt: a deny carrying an unparsed date string never widens the query", async () => {
+			expect(
+				await refusedOrFaithful(vetoed("publishedAt", "gt", "2026-01-01")),
+			).toBe(true);
+		});
+
+		it.fails("a column named after a prototype member is refused like any unknown column", () => {
+			const node = {
+				field: "toString",
+				op: "eq",
+				value: "x",
+			} as unknown as ConditionNode<Record<string, unknown>>;
+
+			expect(() => toDrizzle(node, posts)).toThrow(/does not exist/);
 		});
 	});
 
