@@ -42,7 +42,7 @@ Where each answer comes from:
 |---|---|---|
 | The field is `null` / missing, under `gt` / `lt` / `contains` | **no** | "no value" decidably doesn't exceed anything |
 | `views > "abc"` — a number against a string | **unknown** | there is no meaningful ordering between them |
-| `NaN`, or an invalid `Date` | **no** | not comparable, but decidably so |
+| `NaN`, or an invalid `Date` | **unknown** | nothing orders against it, so no comparison can settle |
 | `status in "draft"` — the list isn't a list | **unknown** | the rule is malformed; see below |
 | An operator the engine doesn't know | **no** | malformed rules deny, they don't crash |
 

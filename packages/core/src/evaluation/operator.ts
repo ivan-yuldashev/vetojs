@@ -78,7 +78,7 @@ const ordered = (
 	const right = normalize(expected);
 
 	if (left === undefined || right === undefined) {
-		return false;
+		return undefined;
 	}
 
 	return satisfies(compareSign(left, right));

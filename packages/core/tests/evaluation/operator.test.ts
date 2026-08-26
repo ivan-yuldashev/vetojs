@@ -304,20 +304,38 @@ describe("evaluateOperator", () => {
 	});
 
 	describe("NaN and invalid dates (incomparable)", () => {
-		it("never satisfies ordering for NaN", () => {
-			expect(evaluateOperator("gt", Number.NaN, 5)).toBe(false);
-			expect(evaluateOperator("gte", Number.NaN, 5)).toBe(false);
-			expect(evaluateOperator("lt", Number.NaN, 5)).toBe(false);
-			expect(evaluateOperator("lte", Number.NaN, 5)).toBe(false);
+		it("answers unknown for NaN on either side of an ordering", () => {
+			for (const op of ["gt", "gte", "lt", "lte"] as const) {
+				expect(evaluateOperator(op, Number.NaN, 5)).toBeUndefined();
+				expect(evaluateOperator(op, 5, Number.NaN)).toBeUndefined();
+				expect(evaluateOperator(op, Number.NaN, Number.NaN)).toBeUndefined();
+			}
 		});
-		it("treats an invalid date as incomparable", () => {
+
+		it("answers unknown for an invalid date", () => {
 			expect(
 				evaluateOperator("gte", new Date("not-a-date"), new Date("2026-01-01")),
-			).toBe(false);
-			expect(evaluateOperator("gte", new Date("not-a-date"), 0)).toBe(false);
+			).toBeUndefined();
+			expect(
+				evaluateOperator("gte", new Date("2026-01-01"), new Date("not-a-date")),
+			).toBeUndefined();
+			expect(
+				evaluateOperator("gte", new Date("not-a-date"), 0),
+			).toBeUndefined();
+		});
+
+		it("still equals decidably, where nothing is being ordered", () => {
 			expect(evaluateOperator("eq", new Date("not-a-date"), Number.NaN)).toBe(
 				false,
 			);
+			expect(evaluateOperator("eq", Number.NaN, Number.NaN)).toBe(false);
+			expect(evaluateOperator("exists", Number.NaN, true)).toBe(true);
+		});
+
+		it("keeps the infinities, which are numbers a comparison can settle", () => {
+			expect(evaluateOperator("gt", Number.POSITIVE_INFINITY, 5)).toBe(true);
+			expect(evaluateOperator("lt", Number.NEGATIVE_INFINITY, 5)).toBe(true);
+			expect(evaluateOperator("gt", 5, Number.NEGATIVE_INFINITY)).toBe(true);
 		});
 	});
 });
