@@ -103,7 +103,7 @@ Calling `parseRules` *without* a vocabulary checks shape only and returns unbran
 
 - **A result object, never an exception.** Bad data is an expected condition here, not an exceptional one.
 - **All errors at once, with paths.** A UI editor or a migration script wants the full list, not a fail-fast.
-- **Operators are matched against a value allowlist**, so a crafted `op: "constructor"` can't reach anything through the prototype chain.
+- **Every name is looked up as an own property**, so a crafted `op`, `resource`, `field` or `relation` called `constructor` or `toString` reads nothing through the prototype chain: operators are matched against a value allowlist, and resources and relations are read with `Object.hasOwn` first.
 - **No schema library.** Hand-written recursion keeps the engine dependency-free and stops the rule format from being coupled to someone else's validator.
 
 ## Source

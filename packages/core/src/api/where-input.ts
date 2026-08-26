@@ -5,6 +5,7 @@ import {
 	isPlainObject,
 	MATCH_QUANTIFIERS,
 	type MatchQuantifier,
+	own,
 	RelationKind,
 } from "../shared/index.js";
 import {
@@ -21,7 +22,7 @@ type Node = ConditionNode<Record<string, unknown>>;
 const relationsOf = (
 	ac: ResourceMap,
 	resource: string,
-): Record<string, Relation> => ac[resource]?.relations ?? {};
+): Record<string, Relation> => own(ac, resource)?.relations ?? {};
 
 const isMatchQuantifier = (match: string): match is MatchQuantifier => {
 	return MATCH_QUANTIFIERS.includes(match);
@@ -137,7 +138,7 @@ export const compileWhereInput = (
 			continue;
 		}
 
-		const relation = relations[key];
+		const relation = own(relations, key);
 
 		if (relation !== undefined) {
 			nodes.push(...relationNodes(key, relation, value, ac));

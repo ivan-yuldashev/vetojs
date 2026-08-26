@@ -609,7 +609,7 @@ describe("toDrizzle — edge semantics", () => {
 			).toBe(true);
 		});
 
-		it.fails("a column named after a prototype member is refused like any unknown column", () => {
+		it("a column named after a prototype member is refused like any unknown column", () => {
 			const node = {
 				field: "toString",
 				op: "eq",
