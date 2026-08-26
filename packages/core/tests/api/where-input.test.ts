@@ -125,10 +125,10 @@ describe("compileWhereInput", () => {
 		});
 	});
 
-	it("skips undefined values, leaving an empty where", () => {
-		expect(compileWhereInput({ status: undefined }, ac, "post")).toEqual({
-			and: [],
-		});
+	it("refuses an undefined value instead of dropping the condition", () => {
+		expect(() => compileWhereInput({ status: undefined }, ac, "post")).toThrow(
+			TypeError,
+		);
 	});
 
 	it("nests relations (to-one inside the related shape)", () => {
