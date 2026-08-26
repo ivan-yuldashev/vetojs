@@ -11,7 +11,7 @@ A policy is a pure function. It takes a user (or any other context you need) and
 - **Writes are checked field by field.** [`validatePayload`](docs/mutations.md) answers which fields and which values this actor may write, and names each violation — the sentence an API client, or a model, needs to fix its request.
 - **Rules can live in a database.** [`parseRules`](docs/parse.md) validates untrusted rule JSON at the boundary, and a rule the code doesn't recognise is dropped — so a database ahead of the deploy can only ever narrow access.
 - **Safe on bad data.** A wrong-typed value or a missing field can narrow access, but will never widen it.
-- **5.2 kB gzipped.** That buys you validation of the rules arriving from the server, building an ability, and checking a row. If the rules are already trusted, the size drops to 3.8 kB. A check inside a server component costs a mere 98 bytes.
+- **5.3 kB gzipped.** That buys you validation of the rules arriving from the server, building an ability, and checking a row. If the rules are already trusted, the size drops to 3.8 kB. A check inside a server component costs a mere 98 bytes.
 - **0 dependencies.** There is exactly one thing to audit for security — the code that actually governs access.
 - **Runs anywhere JavaScript does.** No ties to Node built-ins, the filesystem, or dynamic evaluation. Workers, Deno, Bun and any edge runtime are supported natively.
 
@@ -64,7 +64,7 @@ CASL is an excellent tool and the acknowledged incumbent. But it was built befor
 | **Types** | Actions do narrow per resource, but the unions are often hand-written (for example: `MongoAbility<["create" \| "manage", "campaign"] \| ["create" \| "delete", "user"]>`). | Actions, resources and shapes are all inferred automatically from one `defineAbilities` declaration. |
 | **Database queries** | `accessibleBy` needs a separate adapter per ORM. SQL support has been [open since 2017](https://github.com/stalniy/casl/issues/8), and each new ORM major means waiting for an adapter release. | `ability.where()` returns a standard condition tree that is easy to walk yourself. `@vetojs/drizzle` turns it straight into SQL, with a guarantee: the query returns exactly what `can()` allows. |
 | **Dependencies** | 4 | 0 |
-| **Bundle size** | ~7.0 kB for the whole package (6.3 kB gzip to build and check). Code you never use ships anyway — `$elemMatch`, for instance, even if your policy never touches it. | 5.2 kB gzip for the same check with the incoming rules validated. 3.8 kB without validation. The whole package is 6.3 kB. |
+| **Bundle size** | ~7.0 kB for the whole package (6.3 kB gzip to build and check). Code you never use ships anyway — `$elemMatch`, for instance, even if your policy never touches it. | 5.3 kB gzip for the same check with the incoming rules validated. 3.8 kB without validation. The whole package is 6.4 kB. |
 | **Bad data** | `$gt: 50` can let a `views: "100"` row through, and a `deny` on `secret: true` won't fire for `secret: "true"`. | A value that doesn't fit its condition is strictly "unknown". An `allow` won't fire, and a `deny` will fire reliably. |
 
 Coming from CASL? [Migrating from CASL](docs/migrate-from-casl.md) maps the API across in detail, names the operators that have no equivalent, and covers the two behaviour differences that can change what your policy does.

@@ -1,8 +1,13 @@
+import { saysNothing } from "./saysNothing.js";
+
 export const isPayloadScoped = (rule: {
 	payload?: { fields?: unknown; constraints?: unknown };
 }): boolean => {
-	return (
-		rule.payload?.fields !== undefined ||
-		rule.payload?.constraints !== undefined
-	);
+	if (rule.payload?.fields !== undefined) {
+		return true;
+	}
+
+	const constraints = rule.payload?.constraints;
+
+	return constraints !== undefined && !saysNothing(constraints);
 };
