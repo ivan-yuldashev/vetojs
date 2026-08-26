@@ -168,7 +168,7 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 	};
 
 	const core = {
-		rules,
+		rules: Object.freeze(policy),
 		can: decide,
 		cannot: (action: string, resource: string, instance?: unknown): boolean => {
 			return !decide(action, resource, instance);

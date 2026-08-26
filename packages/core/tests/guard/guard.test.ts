@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import type { AbilitySet } from "../../src/api/ability.types.js";
 import { createRules } from "../../src/api/create-rules.js";
 import { defineAbilities } from "../../src/api/define-abilities.js";
 import { shape } from "../../src/api/schema.js";
@@ -880,5 +881,39 @@ describe("the guard reports the decisions it makes", () => {
 
 		await expect(read()).rejects.toBeInstanceOf(ForbiddenError);
 		expect(seen).toEqual([false]);
+	});
+
+	it("reads the same list can() reads, whatever happens to the caller's array", async () => {
+		const policy = [allow("read", "post")];
+		const built: AbilitySet[] = [];
+
+		const guard = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => policy,
+			onDecision: () => undefined,
+		});
+
+		const read = guard({ action: "read", resource: "post" }, async (ctx) => {
+			built.push((ctx as { ability: AbilitySet }).ability);
+
+			return "ok";
+		});
+
+		await expect(read()).resolves.toBe("ok");
+
+		policy.push(deny("read", "post"));
+
+		const ability = built[0];
+
+		expect(ability).toBeDefined();
+
+		if (ability === undefined) {
+			return;
+		}
+
+		expect(ability.rules).toHaveLength(1);
+		expect(ability.can("read", "post")).toBe(true);
+		await expect(read()).rejects.toBeInstanceOf(ForbiddenError);
 	});
 });

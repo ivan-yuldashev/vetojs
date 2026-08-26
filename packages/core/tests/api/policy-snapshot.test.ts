@@ -23,11 +23,23 @@ const post: Post = { id: "p1", authorId: "u1", views: 10 };
 
 describe("an ability answers from the policy it was built with", () => {
 	describe("the array the caller keeps", () => {
-		it("hands the same array back", () => {
+		it("hands back a list of its own, equal to the one it was given", () => {
 			const rules = [allow("read", "post")];
 			const ability = buildAbility(ac, rules);
 
-			expect(ability.rules).toBe(rules);
+			expect(ability.rules).toEqual(rules);
+			expect(ability.rules).not.toBe(rules);
+			expect(ability.rules[0]).toBe(rules[0]);
+		});
+
+		it("refuses to have that list changed under it", () => {
+			const ability = buildAbility(ac, [allow("read", "post")]);
+
+			expect(Object.isFrozen(ability.rules)).toBe(true);
+			expect(() =>
+				(ability.rules as CheckedRules).push(deny("read", "post")),
+			).toThrow(TypeError);
+			expect(ability.rules).toHaveLength(1);
 		});
 
 		it("ignores a deny appended after a pair was already asked about", () => {
@@ -61,7 +73,7 @@ describe("an ability answers from the policy it was built with", () => {
 			rules.length = 0;
 
 			expect(ability.can("read", "post", post)).toBe(true);
-			expect(ability.rules).toHaveLength(0);
+			expect(ability.rules).toHaveLength(1);
 		});
 
 		it("ignores a rule swapped in place for another", () => {

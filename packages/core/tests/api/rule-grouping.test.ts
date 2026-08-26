@@ -89,14 +89,14 @@ describe("the same ability answering about many pairs", () => {
 		expect(ability.can("update", "post", post)).toBe(true);
 	});
 
-	it("hands back the array it was given, untouched", () => {
+	it("hands back the policy it was built with, untouched", () => {
 		const rules = [allow("read", "post")];
 		const ability = buildAbility(ac, rules);
 
 		ability.can("read", "post", post);
 		ability.can("delete", "comment", comment);
 
-		expect(ability.rules).toBe(rules);
+		expect(ability.rules).toEqual(rules);
 		expect(ability.rules).toHaveLength(1);
 	});
 });
