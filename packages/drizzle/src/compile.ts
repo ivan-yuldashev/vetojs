@@ -39,6 +39,8 @@ const unknownWhenPresent = (column: Column): SQL =>
 
 const totalize = (predicate: SQL): SQL => sql`coalesce(${predicate}, false)`;
 
+const UNKNOWN = sql`null::boolean`;
+
 const NAN_CAPABLE = /^(numeric|decimal|real|double precision|float)/;
 
 const holdsNaN = (column: Column): boolean =>
@@ -279,6 +281,10 @@ const compileField = (
 	value: unknown,
 ): SQL => {
 	if (op === ConditionOperator.Exists) {
+		if (typeof value !== "boolean") {
+			return UNKNOWN;
+		}
+
 		return value ? isNotNull(column) : isNull(column);
 	}
 

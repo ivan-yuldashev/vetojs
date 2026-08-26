@@ -191,6 +191,29 @@ describe("security audit", () => {
 		).toBe(false);
 	});
 
+	it("F-E: a non-boolean exists value is refused or unknown, never coerced", () => {
+		const parsed = parseRules(
+			[
+				{
+					effect: "allow",
+					action: "update",
+					resource: "user",
+					where: { field: "role", op: "exists", value: "false" },
+				},
+			],
+			toVocabulary(ac),
+		);
+
+		const granted =
+			parsed.ok &&
+			buildAbility(ac, parsed.rules).can("update", "user", {
+				id: "u",
+				role: "admin",
+			});
+
+		expect(granted).toBe(false);
+	});
+
 	it("C: an ordered deny does not fire on an absent value (decidable non-match)", () => {
 		const ability = buildAbility(ac, [
 			allow("update", "txn"),
@@ -225,29 +248,6 @@ describe("open findings — an it.fails turns red once the finding is fixed", ()
 		} finally {
 			delete (Object.prototype as Record<string, unknown>).and;
 		}
-
-		expect(granted).toBe(false);
-	});
-
-	it.fails("a non-boolean exists value is refused or unknown, never coerced", () => {
-		const parsed = parseRules(
-			[
-				{
-					effect: "allow",
-					action: "update",
-					resource: "user",
-					where: { field: "role", op: "exists", value: "false" },
-				},
-			],
-			toVocabulary(ac),
-		);
-
-		const granted =
-			parsed.ok &&
-			buildAbility(ac, parsed.rules).can("update", "user", {
-				id: "u",
-				role: "admin",
-			});
 
 		expect(granted).toBe(false);
 	});

@@ -186,10 +186,11 @@ describe("evaluateOperator", () => {
 			expect(evaluateOperator("exists", undefined, false)).toBe(true);
 			expect(evaluateOperator("exists", "value", false)).toBe(false);
 		});
-		it("coerces truthy/falsy expected values to boolean", () => {
-			expect(evaluateOperator("exists", "value", "yes")).toBe(true);
-			expect(evaluateOperator("exists", "value", 0)).toBe(false);
-			expect(evaluateOperator("exists", undefined, 0)).toBe(true);
+		it("answers unknown for anything that is not a boolean", () => {
+			for (const asked of ["yes", "false", "0", "", 0, 1, [], {}, null]) {
+				expect(evaluateOperator("exists", "value", asked)).toBeUndefined();
+				expect(evaluateOperator("exists", undefined, asked)).toBeUndefined();
+			}
 		});
 	});
 
