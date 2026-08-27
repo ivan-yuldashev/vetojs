@@ -71,16 +71,19 @@ const resolveJoins = (
 	tables: Record<string, PgTable | null | undefined>,
 	joins: WideJoins,
 ): ResolvedJoins => {
-	const resolved: ResolvedJoins = {};
+	const resolved: ResolvedJoins = Object.create(null);
 
 	for (const [resource, definition] of Object.entries(ac)) {
+		const declaredJoins = own(joins, resource);
+		const parent = own(tables, resource);
+
 		for (const [relationName, relation] of Object.entries(
 			definition.relations ?? {},
 		)) {
 			const resolution = resolveJoin(
-				joins[resource]?.[relationName],
-				tables[resource],
-				tables[relation.resource],
+				own(declaredJoins, relationName),
+				parent,
+				own(tables, relation.resource),
 				relation.kind,
 			);
 
@@ -88,7 +91,7 @@ const resolveJoins = (
 				continue;
 			}
 
-			const forResource = resolved[resource] ?? {};
+			const forResource = own(resolved, resource) ?? Object.create(null);
 
 			forResource[relationName] = resolution;
 			resolved[resource] = forResource;
@@ -158,8 +161,10 @@ export const defineTables = <AC extends ResourceMap, M extends TableMap<AC>>(
 			`the target of relation "${relation}"`,
 		);
 
-		const resolution =
-			from === undefined ? undefined : resolvedJoins[from]?.[relation];
+		const forResource =
+			from === undefined ? undefined : own(resolvedJoins, from);
+
+		const resolution = own(forResource, relation);
 
 		if (resolution === undefined || "unavailable" in resolution) {
 			const cause =

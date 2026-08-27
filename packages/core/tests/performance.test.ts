@@ -127,9 +127,6 @@ describe("the engine stays within reach of the work it does", () => {
 		});
 
 		expect(wideCost).toBeLessThan(narrowCost * 3);
-	});
-
-	it("did the work it was asked to", () => {
-		expect(sink).toBeGreaterThan(0);
+		expect(sink, "the measured loops were optimised away").toBeGreaterThan(0);
 	});
 });

@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm";
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import type { JoinPredicate, JoinResolution } from "./compile.js";
+import { own } from "./own.js";
 
 const columnKey = (table: Table, column: Column): string => {
 	for (const [key, candidate] of Object.entries(getTableColumns(table))) {
@@ -23,7 +24,7 @@ const columnKey = (table: Table, column: Column): string => {
 };
 
 const requiredColumn = (table: Table, key: string): Column => {
-	const column = getTableColumns(table)[key];
+	const column = own(getTableColumns(table), key);
 
 	if (column === undefined) {
 		throw new Error(

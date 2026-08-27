@@ -4,6 +4,7 @@ import {
 	readdirSync,
 	readFileSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -116,7 +117,20 @@ const claims = [
 	},
 ];
 
-const built = existsSync(coreDist) && existsSync(serverDist);
+const newestMtime = (dir: string) =>
+	readdirSync(dir, { recursive: true, encoding: "utf8" }).reduce(
+		(newest, name) => Math.max(newest, statSync(join(dir, name)).mtimeMs),
+		0,
+	);
+
+const built =
+	existsSync(coreDist) &&
+	existsSync(serverDist) &&
+	Math.min(statSync(coreDist).mtimeMs, statSync(serverDist).mtimeMs) >=
+		Math.max(
+			newestMtime(`${repo}/packages/core/src`),
+			newestMtime(`${repo}/packages/react/src`),
+		);
 
 if (!built) {
 	console.log(
