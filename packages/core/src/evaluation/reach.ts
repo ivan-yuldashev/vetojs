@@ -1,11 +1,12 @@
 import type { ConditionNode } from "../model/index.js";
 import type { Row } from "../shared/index.js";
+import { owns } from "../shared/index.js";
 import { relatedOf } from "./read.js";
 
 export type Reach = { relation: string; through: Reach[] };
 
 const merge = (into: Reach[], node: ConditionNode<Row>): void => {
-	if ("and" in node) {
+	if (owns(node, "and")) {
 		for (const child of node.and) {
 			merge(into, child);
 		}
@@ -13,7 +14,7 @@ const merge = (into: Reach[], node: ConditionNode<Row>): void => {
 		return;
 	}
 
-	if ("or" in node) {
+	if (owns(node, "or")) {
 		for (const child of node.or) {
 			merge(into, child);
 		}
@@ -21,13 +22,13 @@ const merge = (into: Reach[], node: ConditionNode<Row>): void => {
 		return;
 	}
 
-	if ("not" in node) {
+	if (owns(node, "not")) {
 		merge(into, node.not);
 
 		return;
 	}
 
-	if (!("relation" in node)) {
+	if (!owns(node, "relation") || !("relation" in node)) {
 		return;
 	}
 
