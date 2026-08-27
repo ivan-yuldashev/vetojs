@@ -264,6 +264,14 @@ describe("buildAbility — typed AbilitySet", () => {
 			const fields = ability.permittedFields("read", "post", ["title"]);
 			expect(fields).toEqual(["title"]);
 		});
+
+		it("types the result as the fields that were asked about", () => {
+			const asked: "title"[] = ability.permittedFields("update", "post", [
+				"title",
+			]);
+
+			expect(asked).toEqual(["title"]);
+		});
 	});
 
 	describe("validate (trust gate)", () => {

@@ -101,15 +101,16 @@ export type AbilitySet<AC extends ResourceMap = ResourceMap> = {
 
 	/**
 	 * Which of `fields` may this actor write — for driving a form. You pass the field
-	 * universe because a schema cannot be asked for its keys.
+	 * universe because a schema cannot be asked for its keys, and what comes back is a
+	 * subset of it, typed as one: ask about `["status"]` and the result is `"status"[]`.
 	 *
 	 * A disabled input is a courtesy; the server still enforces with `validatePayload`.
 	 */
-	permittedFields<R extends ResourceName<AC>>(
+	permittedFields<R extends ResourceName<AC>, F extends keyof ShapeOf<AC, R>>(
 		action: ActionFor<AC, R>,
 		resource: R,
-		fields: (keyof ShapeOf<AC, R>)[],
-	): (keyof ShapeOf<AC, R>)[];
+		fields: F[],
+	): F[];
 
 	/**
 	 * Does incoming data match the resource's schema? Shape validation, not permission —
