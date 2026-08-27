@@ -52,7 +52,18 @@ where: { blog: { workspace: { id: workspaceId } } }
 | строка / число / bigint | вы выбрали идентификаторы, а не строки | **исключение** — связь на самом деле не загружена |
 | что-то ещё | испорченные данные | «неизвестно» → `allow` не даёт ничего, `deny` срабатывает |
 
-С Prisma, Drizzle или TypeORM всё работает само собой: `include`/`with` отдаёт объекты или `null`, а связь, которую вы не запрашивали, остаётся `undefined`.
+Prisma, Drizzle и TypeORM следуют ему все: `include`/`with` отдаёт объекты или `null`, а связь, которую вы не запрашивали, остаётся `undefined`.
+
+Читает движок обычные данные — объект, у которого прототип `Object.prototype` или которого нет вовсе. Prisma и Drizzle отдают ровно это. TypeORM отдаёт **экземпляры классов-сущностей**, и проверка по такому объекту ответит «нет»: движок не читает поля через незнакомый ему прототип. Разложите сущность на входе:
+
+```ts
+const entity = await repository.findOne({
+	where: { id: postId },
+	relations: { author: true },
+});
+
+ability.can("read", "post", { ...entity });
+```
 
 ```ts
 const post = await db.query.posts.findFirst({
