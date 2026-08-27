@@ -84,7 +84,7 @@ const writer = actor.memberships
 allow("read", "post", { where: { blog: { workspace: { id: { in: writer } } } } });
 ```
 
-Same verdicts, and the size stops tracking the tenant count. On the example policy with an actor in 50 workspaces, **338 rules and 64 kB of JSON become 13 rules and 4 kB**, and `can()` on one post drops from 1.2 µs to 0.45 µs. Group by whatever your rules actually branch on — usually the role — and let `in` carry the ids. The measurement is a script: `pnpm --filter @vetojs-examples/drizzle-pg exec tsx src/policy-shape.ts`.
+Same verdicts, and the size stops tracking the tenant count. On the example policy with an actor in 50 workspaces, **338 rules and 64 kB of JSON become 13 rules and 4 kB**, and `can()` on one post drops from 1.8 µs to 0.72 µs. Group by whatever your rules actually branch on — usually the role — and let `in` carry the ids. The measurement is a script: `pnpm --filter @vetojs-examples/drizzle-pg exec tsx src/policy-shape.ts`.
 
 ## Why it works this way
 

@@ -12,7 +12,7 @@ npm install @vetojs/react         # optional: <Can>, useAbility, AbilityProvider
 # the guard ships inside @vetojs/core, under @vetojs/core/guard
 ```
 
-ESM only, Node 20+. `@vetojs/core` is a peer dependency of both bindings, so install it alongside them rather than relying on it being pulled in. `@vetojs/react` needs React 18+ as a peer as well.
+ESM only, Node 22+. `@vetojs/core` is a peer dependency of both bindings, so install it alongside them rather than relying on it being pulled in. `@vetojs/react` needs React 18+ as a peer as well.
 
 ## The whole flow
 

@@ -87,8 +87,8 @@ const claims = [
 	},
 	{
 		what: "browser bundle, CASL table",
-		en: /([\d.]+) kB gzip for the same check/,
-		ru: /([\d.]+) kB gzip на ту же проверку/,
+		en: /having first validated the rules that arrived \| no equivalent step \| ([\d.]+) kB gzip/,
+		ru: /сперва проверив пришедшие правила \| такого шага нет \| ([\d.]+) kB gzip/,
 		get: () => size.browser,
 	},
 	{
@@ -99,14 +99,14 @@ const claims = [
 	},
 	{
 		what: "browser bundle on trusted rules, CASL table",
-		en: /([\d.]+) kB without validation/,
-		ru: /([\d.]+) kB без валидации/,
+		en: /check a row \| [\d.]+ kB gzip \| \*\*([\d.]+) kB gzip\*\*/,
+		ru: /доверенных правил и проверить строку \| [\d.]+ kB gzip \| \*\*([\d.]+) kB gzip\*\*/,
 		get: () => size.trusted,
 	},
 	{
 		what: "whole package",
-		en: /whole package is ([\d.]+) kB/,
-		ru: /целиком — ([\d.]+) kB/,
+		en: /the whole package \| [\d.]+ kB gzip \| ([\d.]+) kB gzip/,
+		ru: /весь пакет целиком \| [\d.]+ kB gzip \| ([\d.]+) kB gzip/,
 		get: () => size.whole,
 	},
 	{
@@ -157,9 +157,12 @@ describe.skipIf(!built)(
 
 					expect(
 						found.length,
-						`expected exactly one ${claim.what} claim in ${file} — did the wording change?`,
-					).toBe(1);
-					expect(found[0]?.[1]).toBe(claim.get());
+						`expected a ${claim.what} claim in ${file} — did the wording change?`,
+					).toBeGreaterThan(0);
+
+					for (const match of found) {
+						expect(match[1]).toBe(claim.get());
+					}
 				});
 			}
 		}
