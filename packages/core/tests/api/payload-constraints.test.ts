@@ -159,6 +159,32 @@ describe("a payload constraint that says nothing does not silence the rule", () 
 		});
 	});
 
+	describe("a deny naming a field and a constraint over that same field", () => {
+		const both = buildAbility(ac, [
+			allow("update", "post", { payload: { fields: ["status", "views"] } }),
+			deny("update", "post", {
+				payload: { fields: ["status"], constraints: { status: "secret" } },
+			}),
+		]);
+
+		it("subtracts the field, so the constraint never decides", () => {
+			for (const status of ["secret", "public"]) {
+				expect(both.validatePayload("update", "post", row, { status })).toEqual(
+					{
+						ok: false,
+						violations: [{ field: "status", reason: "field not permitted" }],
+					},
+				);
+			}
+		});
+
+		it("leaves a field the deny does not name alone", () => {
+			expect(both.validatePayload("update", "post", row, { views: 6 }).ok).toBe(
+				true,
+			);
+		});
+	});
+
 	describe("the same emptiness arriving as a compiled rule", () => {
 		it("does not turn a deny into silence", () => {
 			for (const constraints of [{ and: [] }, undefined]) {

@@ -15,7 +15,7 @@
 		"demo:react:build": "pnpm --filter \"@vetojs-examples/react-spa...\" run build",
 		"demo:next": "pnpm --filter \"@vetojs-examples/next-app^...\" run build && pnpm --filter @vetojs-examples/next-app dev",
 		"demo:next:build": "pnpm --filter \"@vetojs-examples/next-app...\" run build",
-		"test": "vitest run",
+		"test": "pnpm typecheck:packages && vitest run",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
 		"bench": "pnpm build && vitest bench",
@@ -46,6 +46,6 @@
 	},
 	"simple-git-hooks": {
 		"pre-commit": "pnpm exec biome check --staged --no-errors-on-unmatched",
-		"pre-push": "pnpm typecheck:packages && pnpm test"
+		"pre-push": "pnpm test"
 	}
 }

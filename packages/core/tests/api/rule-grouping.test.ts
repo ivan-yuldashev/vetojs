@@ -110,19 +110,18 @@ describe("a grant is final only when the pair carries no deny", () => {
 
 		expect(ability.can("read", "post", post)).toBe(false);
 		expect(ability.can("read", "post", { ...post, views: 200 })).toBe(true);
-		expect(ability.can("read", "post", post)).toBe(false);
 	});
 
-	it("counts a deny written as manage", () => {
+	it("gives the same answer after another row was asked in between", () => {
 		const ability = buildAbility(ac, [
 			allow("read", "post"),
-			deny("manage", "post", { where: { authorId: "u2" } }),
+			deny("read", "post", { where: { views: { lt: 100 } } }),
 		]);
 
-		expect(ability.can("read", "post", { ...post, authorId: "u2" })).toBe(
-			false,
-		);
-		expect(ability.can("read", "post", post)).toBe(true);
+		expect(ability.can("read", "post", post)).toBe(false);
+		ability.can("read", "post", { ...post, views: 200 });
+
+		expect(ability.can("read", "post", post)).toBe(false);
 	});
 
 	it("does not count a deny that only narrows the payload", () => {

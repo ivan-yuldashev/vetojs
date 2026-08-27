@@ -1,3 +1,5 @@
+import v8 from "node:v8";
+import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { buildAbility } from "../../src/api/ability.js";
 import type { CheckedRules } from "../../src/api/checked-rules.types.js";
@@ -18,14 +20,31 @@ const { allow, deny } = createRules(ac);
 
 const post: Post = { id: "p1", authorId: "u1" };
 
+const collect: () => void =
+	(globalThis as { gc?: () => void }).gc ??
+	(() => {
+		v8.setFlagsFromString("--expose-gc");
+		const exposed = vm.runInNewContext("gc") as () => void;
+		v8.setFlagsFromString("--no-expose-gc");
+
+		return exposed;
+	})();
+
+const settled = (): number => {
+	collect();
+	collect();
+
+	return process.memoryUsage().heapUsed;
+};
+
 const retained = (run: (mark: string) => void): number => {
 	run("warm");
 
-	const before = process.memoryUsage().heapUsed;
+	const before = settled();
 
 	run("measured");
 
-	return (process.memoryUsage().heapUsed - before) / 1024 / 1024;
+	return (settled() - before) / 1024 / 1024;
 };
 
 describe("what an ability remembers is bounded by what was declared", () => {
@@ -39,7 +58,7 @@ describe("what an ability remembers is bounded by what was declared", () => {
 				}
 			});
 
-			expect(grew).toBeLessThan(6);
+			expect(grew).toBeLessThan(1);
 		});
 
 		it("keeps the heap flat under a stream of unseen resources", () => {
@@ -51,7 +70,7 @@ describe("what an ability remembers is bounded by what was declared", () => {
 				}
 			});
 
-			expect(grew).toBeLessThan(6);
+			expect(grew).toBeLessThan(1);
 		});
 
 		it("answers no for them, as it always did", () => {

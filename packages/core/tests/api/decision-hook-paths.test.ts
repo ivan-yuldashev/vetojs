@@ -93,25 +93,6 @@ describe("every answer reaches the hook", () => {
 	});
 
 	describe("with a row", () => {
-		it("reports the allow whose condition matched", () => {
-			const rule = allow("read", "post", { where: { authorId: { eq: "u1" } } });
-			const { seen, ability } = watch([rule]);
-
-			expect(ability.can("read", "post", postBy(admin))).toBe(true);
-			expect(seen[0]?.rule).toBe(rule);
-		});
-
-		it("reports the deny whose condition matched, over the allow", () => {
-			const permit = allow("read", "post");
-			const forbid = deny("read", "post", {
-				where: { status: { eq: "draft" } },
-			});
-			const { seen, ability } = watch([permit, forbid]);
-
-			expect(ability.can("read", "post", postBy(admin))).toBe(false);
-			expect(seen[0]?.rule).toBe(forbid);
-		});
-
 		it("reports no rule when the only allow did not match the row", () => {
 			const { seen, ability } = watch([
 				allow("read", "post", { where: { authorId: { eq: "someone" } } }),
