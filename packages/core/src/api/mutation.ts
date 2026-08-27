@@ -25,6 +25,12 @@ export const canMutate = <T extends Row>(
 	settled?: Settled<T>,
 ): boolean => evaluateRules(rules, action, resource, row, settled);
 
+const isProtoKey = (field: PropertyKey): boolean => {
+	return (
+		field === "__proto__" || field === "constructor" || field === "prototype"
+	);
+};
+
 export const permittedFields = <T extends Row>(
 	rules: Rule<T>[],
 	action: string,
@@ -56,9 +62,13 @@ export const permittedFields = <T extends Row>(
 		denies.flatMap((rule) => rule.payload?.fields ?? []),
 	);
 
-	return fields.filter(
-		(field) => !denyFields.has(field) && (allowsAll || allowFields.has(field)),
-	);
+	return fields.filter((field) => {
+		if (denyFields.has(field)) {
+			return false;
+		}
+
+		return !isProtoKey(field) && (allowsAll || allowFields.has(field));
+	});
 };
 
 const fieldsOf = <T extends Row>(rules: Rule<T>[]) => {
@@ -72,12 +82,8 @@ type FieldConstraint = {
 };
 
 const fieldConstraints = <T extends Row>(
-	constraint: ConditionNode<T> | undefined,
+	constraint: ConditionNode<T>,
 ): FieldConstraint[] | null => {
-	if (constraint === undefined) {
-		return [];
-	}
-
 	if ("and" in constraint) {
 		const collected: FieldConstraint[] = [];
 
@@ -168,18 +174,15 @@ export const validatePayload = <T extends Row>(
 		return { ok: false, violations: [] };
 	}
 
-	const allowsWithFields = allows.filter(
-		(rule) => rule.payload?.fields !== undefined,
-	);
-
-	const hasAllowFields = allowsWithFields.length > 0;
-	const allowFields = new Set(fieldsOf(allowsWithFields));
+	const allowsAll = allows.some((rule) => rule.payload?.fields === undefined);
+	const allowFields = new Set(fieldsOf(allows));
 	const denyFields = new Set(fieldsOf(denies));
 
 	const violations: PayloadViolation[] = [];
 
 	for (const [field, value] of Object.entries(data)) {
-		const allowedByFields = hasAllowFields ? allowFields.has(field) : true;
+		const allowedByFields =
+			!isProtoKey(field) && (allowsAll || allowFields.has(field));
 
 		if (!allowedByFields || denyFields.has(field)) {
 			violations.push({ field, reason: "field not permitted" });
