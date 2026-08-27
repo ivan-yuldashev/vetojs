@@ -12,7 +12,7 @@ npm install @vetojs/react         # по желанию: <Can>, useAbility, Abil
 # гвард лежит внутри @vetojs/core, под @vetojs/core/guard
 ```
 
-Только ESM, Node 20+. `@vetojs/core` — peer-зависимость обеих привязок, поэтому ставьте его рядом с ними, а не рассчитывайте, что он подтянется сам. Для `@vetojs/react` нужен ещё React 18+ как peer.
+Только ESM, Node 22+. `@vetojs/core` — peer-зависимость обеих привязок, поэтому ставьте его рядом с ними, а не рассчитывайте, что он подтянется сам. Для `@vetojs/react` нужен ещё React 18+ как peer.
 
 ## Весь путь целиком
 
