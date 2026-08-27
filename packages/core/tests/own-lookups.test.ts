@@ -17,7 +17,7 @@ const sources = (dir: string): string[] =>
 	});
 
 const NAMED_BY_A_RULE =
-	/\[(resource|action|field|key|name|relation|relationName)\]/;
+	/[\w)\].]\[(resource|action|field|key|name|relation|relationName)\]/;
 const KEY = /\[\w+\]\s*(=[^=]|:)/;
 const COMMENT = /^\s*(\*|\/\/|\/\*)/;
 
