@@ -1,6 +1,6 @@
 {
 	"name": "@vetojs/core",
-	"version": "0.11.1",
+	"version": "0.12.0",
 	"description": "Type-safe authorization for TypeScript, with no classes and no hidden state. Rules are plain JSON: they cross the server/client boundary, answer can(), gate writes field by field, and become a SQL WHERE through the Drizzle adapter. One guard covers server actions, HTTP handlers and agent tool calls. Zero dependencies.",
 	"keywords": [
 		"authorization",
