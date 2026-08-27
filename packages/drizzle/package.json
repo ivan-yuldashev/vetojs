@@ -1,6 +1,6 @@
 {
 	"name": "@vetojs/drizzle",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "Drizzle ORM adapter for @vetojs — compiles rule conditions into SQL WHERE with engine-faithful fail-closed semantics.",
 	"keywords": [
 		"authorization",

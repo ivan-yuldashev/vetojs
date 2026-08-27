@@ -1,5 +1,144 @@
 # @vetojs/core
 
+## 0.12.0
+
+### Minor Changes
+
+- 6e7f0b8: **A resource whose columns are named `field`, `op` and `value` can be written with shorthand.**
+  
+  `where` refused a condition that was already compiled by recognising its shape, so a policy over a table shaped like veto's own condition AST — a rules table, an audit log — could not name all three columns at once without being mistaken for a rule someone reused by accident.
+  
+  The refusal now works by identity: `where` recognises the conditions it built itself, whatever they look like. Reusing another rule's `where` still throws and still says what to pass instead; a relation node is still recognised by shape, because nothing else takes that form.
+  
+  ```ts
+  allow("read", "rule", { where: { field: "authorId", op: "eq", value: "u1" } });
+  ```
+- 23e437d: **`exists` takes a boolean, and a rule carrying anything else is refused.**
+  
+  The value was read as `Boolean(value)`, so `"false"`, `"0"`, `[]` and `{}` — all of them ordinary JSON — meant `exists: true`. A rule written as "this field must be absent" granted access to rows where the field is present: the inverse of what its author wrote.
+  
+  `parseRules` now reports `expected a boolean for "exists"` and quarantines such a rule, the same way it already refuses a non-array for `in`. A rule that reaches the engine some other way answers *unknown* rather than guessing, so an `allow` grants nothing and a `deny` fires; `@vetojs/drizzle` compiles the same rule to unknown, so the query returns what `can()` allows.
+  
+  `exists: true` and `exists: false` are unchanged, and still ask about presence rather than truthiness: `0`, `false` and `""` are values a row holds.
+- cc7f380: **`NaN` and an invalid `Date` answer an ordering as unknown, so a prohibition still fires.**
+  
+  `deny("update", "txn", { where: { amount: { gt: 1000 } } })` used to stand aside for a row whose `amount` was `NaN`: the comparison answered a decidable "no", which reads as "the prohibition does not apply". So did `gte`, `lt` and `lte` — a value that cannot be ordered slipped past every limit, and `gt 1000` together with `lte 1000` cover the whole line, so nothing was left to catch it. An invalid `Date` behaved the same, and both arrive easily: `parseFloat` on dirty input, `Number(undefined)`, a `NUMERIC 'NaN'` column, `new Date(…)` on a malformed string.
+  
+  The answer is now *unknown*, which is what the engine already answers for a comparison it cannot settle: an `allow` grants nothing and a `deny` fires. A field that is absent or `null` is unchanged — that is a decidable non-match, and it stays one.
+- 2c62c8a: **A decision says when the row was something the engine will not read.**
+  
+  `can()` reads plain data — an object whose prototype is `Object.prototype`, or none. Handed anything else, it answers the usual fail-closed `false`, which until now looked exactly like a refusal by policy. An ORM that returns entity class instances — TypeORM does — therefore produced checks that said no while the rule plainly matched.
+  
+  The verdict is unchanged, and nothing new is thrown. What the decision hook receives now carries `reason: "not a plain row"` for that case, beside the `"no row"` the guard already reports:
+  
+  ```ts
+  buildAbility(ac, rules, {
+  	onDecision: (decision) => {
+  		if (decision.reason === "not a plain row") {
+  			logger.warn("pass a plain object: { ...entity }");
+  		}
+  	},
+  });
+  ```
+  
+  It covers `can`, `cannot`, `authorize` and `canMutate`. A row with no prototype at all is plain data and is read as before.
+- 2f7e86b: **A field naming two operators at once is refused, with the `and` that means it.**
+  
+  `{ age: { gte: 18, lte: 65 } }` reads like a range and compiles like one nowhere: the shorthand takes one operator per object, so a second key dropped the whole thing into an equality against `{ gte: 18, lte: 65 }`. No row equals that object, so the rule granted nothing — silently, and TypeScript let it through, because excess-property checking against a union of single-operator objects accepts a key that any member declares.
+  
+  It now throws, naming both keys and the shape that expresses the range:
+  
+  ```
+  veto: "gte" and "lte" name one field at once — a condition takes one operator,
+  so write and: [{ field: { gte: … } }, { field: { lte: … } }].
+  ```
+  
+  A value that merely looks like one is untouched: a field compared to `{ theme: "dark" }`, or to an object where only some keys read as operator names, compiles to the equality it always did.
+- 1fe3655: **A resource, relation or field named after something every object inherits is looked up as an own property.**
+  
+  `constructor`, `toString`, `valueOf`, `__proto__` and their kin are found on any object literal, so a rule naming one of them as its resource or relation used to reach a function through the prototype chain instead of missing:
+  
+  - `parseRules` threw a `TypeError` instead of returning a result, which is the one thing it promises never to do — and the throw was controlled entirely by the contents of the rules it was handed.
+  - `ability.validate("constructor", data)` answered `{ ok: true }` for any object, where an undeclared resource must be refused.
+  - `@vetojs/drizzle` handed `Object.prototype.toString` to the query builder as though it were a column, instead of refusing the field.
+  
+  Every lookup by a string key now checks `Object.hasOwn` first. A resource, relation or column genuinely called `constructor` still resolves — it is a declaration like any other.
+- 4b38eed: **A condition's shape is read from its own keys, so a polluted prototype cannot reshape it.**
+  
+  The engine decided what a condition node was with the `in` operator, which walks the prototype chain. In a process where something else had already achieved prototype pollution — a vulnerable `merge`, `set` or query parser anywhere in the dependency tree — a single `Object.prototype.and = []` made every condition read as an empty `and`, which is the engine's own "everything". Every rule became unconditional. `Object.prototype.not = {}` sent the compiler into unbounded recursion instead, and `Object.prototype.relation` threw out of the middle of a check.
+  
+  Every place that asks what shape a node has — the compiler, the relation walk, the trust gate, the payload constraints, and the SQL adapter — now asks `Object.hasOwn`. So does the check for the vacuous `{ and: [] }` marker, which pollution could otherwise forge onto a sound rule and drop its condition.
+  
+  A node that carries no shape the engine knows now answers *unknown* rather than being read as a field condition: an `allow` grants nothing, a `deny` fires, and the adapter refuses to build a query from it.
+- 98e3ab4: **A `deny` whose payload constraint says nothing stays a prohibition on the row.**
+  
+  `payload.constraints` that the shorthand could not read — `or`, `not`, `relation`, a string, `null` — compiled to an empty condition, and an empty condition still marked the rule as scoped to a payload. A rule scoped that way is skipped by row checks, left out of `ability.where()`, invisible to the guard, and vetoes no field: an attempt to narrow a prohibition by value turned it into silence.
+  
+  The shorthand now refuses what it cannot read, naming what payload constraints take — a field condition or `and`, which is what `parseRules` has always required. And a constraint that compiles to nothing no longer scopes a rule, whether it was written here or arrived as `{ "and": [] }` from a database, so the `deny` keeps prohibiting the row.
+  
+  A constraint that does name a value is unchanged: the row stays readable and only the value it names is refused.
+- 66efe70: **`validatePayload` reads two `allow` rules the way `permittedFields` already did.**
+  
+  An `allow` that lists `payload.fields` narrowed what a second, unrestricted `allow` had opened, so a form built from `permittedFields` offered a field the write then refused. Allow rules are additive — one unrestricted `allow` opens every field, and taking a field away is `deny`'s job. Both now answer the same question the same way.
+  
+  If a policy stacked a field-listed `allow` on top of an unrestricted one expecting the list to narrow, those fields now write — move the restriction into a `deny`.
+- 66efe70: **A payload naming `__proto__`, `constructor` or `prototype` is refused, and no rule can open it.**
+  
+  When no `allow` listed `payload.fields`, every key was permitted — including the three that `JSON.parse` happily creates as own properties. They travelled through `validatePayload` into `result.data`, which is the object that goes on to `db.update().set(...)`, `Object.assign(row, data)` or a recursive merge. That is the boundary where a sanitiser is expected to reject them.
+  
+  They are now reported as `field not permitted` like any other key a policy does not open, and listing one in `payload.fields` grants nothing — so a rule arriving from a database still only ever narrows access. A resource with a column genuinely called `constructor` writes it outside the payload path.
+  
+  `result.data` is unchanged in every other way: the same plain object, carrying the same validated keys.
+- 02c91de: **A condition whose value is `undefined` is refused instead of dropped.**
+  
+  `allow("read", "post", { where: { authorId: user.id } })` with an `undefined` id used to compile to a rule with no `where` at all — an unconditional grant on the whole resource, both for `can()` and for the `ability.where()` handed to the database. A rule with two conditions lost one and widened. It now throws a `TypeError` naming the key, at the moment the policy is written rather than on the next request:
+  
+  ```
+  veto: where.authorId is undefined — dropping it would widen the rule to every row.
+  Pass a value, or build the shorthand without the key.
+  ```
+  
+  The same refusal covers an `undefined` inside an operator (`{ eq: undefined }`), under `and`, `or` and `not`, inside a relation, as a relation quantifier, and in `payload.constraints`. A shorthand that describes no condition at all — a to-many relation with no quantifier — is refused for the same reason. `parseRules` rejects a compiled rule whose `value` is `undefined`.
+  
+  What still compiles: `where: {}` and a rule written without a `where` (both unconditional on purpose), `null`, `false`, `0`, `""`, `{ exists: false }`, and the vacuous `{ and: [] }` and `{ or: [] }`.
+  
+  Only `exactOptionalPropertyTypes: true` made TypeScript catch this before; the refusal does not depend on the compiler options of the project using it.
+- 95bfd0e: **`ability.rules` is the snapshot the ability answers from, frozen.**
+  
+  The checks read a copy of the policy taken at build time, but the array handed back was the caller's own. Anything reading `ability.rules` — the guard, when it asks whether a blanket prohibition exists, or a server component serialising the policy for the client — could therefore see rules the checks did not, once that array was appended to.
+  
+  `ability.rules` is now the same list the checks read, and frozen, so the two cannot drift apart and neither can be changed from outside. Its contents are unchanged: the rule objects are the ones you passed, in order, ready to send to a client.
+- ab0b230: **`ability.rules` is typed as the read-only list it already is.**
+  
+  The array has been frozen since it became the snapshot the checks read, but its type still said `CheckedRule[]`, so `ability.rules.push(rule)` compiled and only failed when it ran. It is now `readonly CheckedRule[]`, and the mistake is a type error.
+  
+  Everything that takes a policy accepts a read-only one: `buildAbility`, `AbilityProvider`, `useSetRules` and the guard. Rebuilding from a snapshot — `buildAbility(ac, other.rules)` — reads the same as before. `CheckedRules` itself is unchanged, so a rule list you build and mutate on the way to `buildAbility` still compiles.
+
+### Patch Changes
+
+- 05d0d7b: **What an ability remembers is bounded by what `defineAbilities` declared.**
+  
+  An ability groups rules per resource and action the first time it is asked about that pair, and kept every pair it was ever asked about. A long-lived ability — a module singleton, a cached policy, an `AbilityProvider` — behind an endpoint that takes the action or the resource from the request therefore grew without limit: 200k unseen actions retained 41 MB, 200k unseen resources 76 MB.
+  
+  Only pairs the registry declares are remembered now. A name it does not declare is still answered exactly as before — rules that name it are evaluated, a `deny` among them still overrides — the answer is simply computed each time instead of being kept. Checks on declared pairs are unchanged, including the ones with no matching rules.
+- 88d34d2: **`permittedFields` is typed as a subset of the fields you asked about.**
+  
+  `ability.permittedFields("update", "post", ["status"])` now has the type `"status"[]` instead of every key of the resource. That is what the call has always returned; only the type was wider.
+  
+  Feeding the result into something keyed by those fields — a form config, a record of inputs — now type-checks without a cast.
+- c2d315d: **`where` refuses a condition that was already compiled.**
+  
+  Handing `otherRule.where` — or any `{ field, op, value }` node — to `allow` or `deny` now throws a `TypeError` that names what to pass instead: the shorthand the rule was written from, or the whole rule through `parseRules`. It used to compile into a condition over fields named `field`, `op` and `value`, which no row has.
+  
+  To share one condition between two rules, keep the shorthand and pass it to both:
+  
+  ```ts
+  const mine = { authorId: user.id };
+  
+  allow("read", "post", { where: mine });
+  allow("update", "post", { where: mine });
+  ```
+
 ## 0.11.1
 
 ### Patch Changes
