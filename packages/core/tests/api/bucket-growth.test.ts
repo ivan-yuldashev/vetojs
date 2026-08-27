@@ -73,6 +73,22 @@ describe("what an ability remembers is bounded by what was declared", () => {
 			expect(grew).toBeLessThan(1);
 		});
 
+		it("keeps the heap flat when the stream asks about manage", () => {
+			const ability = buildAbility(ac, [allow("read", "post")]);
+
+			const grew = retained((mark) => {
+				for (let index = 0; index < 100_000; index++) {
+					ability.can(
+						"manage" as "read",
+						`${mark}-res${index}` as "post",
+						post,
+					);
+				}
+			});
+
+			expect(grew).toBeLessThan(1);
+		});
+
 		it("answers no for them, as it always did", () => {
 			const ability = buildAbility(ac, [allow("read", "post")]);
 
