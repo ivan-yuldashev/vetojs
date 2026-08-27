@@ -16,7 +16,7 @@ import type {
 } from "./guard.types.js";
 
 const hasMatchingDeny = (
-	rules: Rule[],
+	rules: readonly Rule[],
 	action: string,
 	resource: string,
 ): boolean => {

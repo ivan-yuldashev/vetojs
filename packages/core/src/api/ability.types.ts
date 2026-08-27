@@ -1,5 +1,5 @@
 import type { ConditionNode, Rule } from "../model/index.js";
-import type { CheckedRules } from "./checked-rules.types.js";
+import type { CheckedRule } from "./checked-rules.types.js";
 import type {
 	ActionFor,
 	ResourceMap,
@@ -20,7 +20,7 @@ export type AbilitySet<AC extends ResourceMap = ResourceMap> = {
 	 * The rules this ability was built from — plain JSON, ready to send to the client
 	 * and hand to `<AbilityProvider rules={…}>`.
 	 */
-	readonly rules: CheckedRules;
+	readonly rules: readonly CheckedRule[];
 
 	/**
 	 * May this action happen?

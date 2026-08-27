@@ -1,6 +1,9 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { buildAbility } from "../../src/api/ability.js";
-import type { CheckedRules } from "../../src/api/checked-rules.types.js";
+import type {
+	CheckedRule,
+	CheckedRules,
+} from "../../src/api/checked-rules.types.js";
 import { createRules } from "../../src/api/create-rules.js";
 import { defineAbilities } from "../../src/api/define-abilities.js";
 import { shape } from "../../src/api/schema.js";
@@ -385,7 +388,7 @@ describe("ability.rules is ready for the client", () => {
 		const { allow } = createRules(acPost);
 		const ability = buildAbility(acPost, [allow("read", "post")]);
 
-		expectTypeOf(ability.rules).toEqualTypeOf<CheckedRules>();
+		expectTypeOf(ability.rules).toEqualTypeOf<readonly CheckedRule[]>();
 		expect(() => buildAbility(acPost, ability.rules)).not.toThrow();
 	});
 });

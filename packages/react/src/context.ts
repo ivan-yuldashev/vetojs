@@ -2,7 +2,7 @@
 
 import type {
 	AbilitySet,
-	CheckedRules,
+	CheckedRule,
 	ResourceMap,
 	ResourceName,
 } from "@vetojs/core";
@@ -112,11 +112,11 @@ export const createVetoContext = <AC extends ResourceMap>(
 		return useSyncExternalStore(store.subscribe, store.get, store.get);
 	};
 
-	const useSetRules = (): ((rules: CheckedRules) => void) => {
+	const useSetRules = (): ((rules: readonly CheckedRule[]) => void) => {
 		const store = useStore();
 
 		return useCallback(
-			(rules: CheckedRules) => store.publish(buildAbility(ac, rules)),
+			(rules: readonly CheckedRule[]) => store.publish(buildAbility(ac, rules)),
 			[store],
 		);
 	};

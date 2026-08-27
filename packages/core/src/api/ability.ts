@@ -19,7 +19,7 @@ import {
 	type Row,
 } from "../shared/index.js";
 import type { AbilityOptions, AbilitySet } from "./ability.types.js";
-import type { CheckedRules } from "./checked-rules.types.js";
+import type { CheckedRule, CheckedRules } from "./checked-rules.types.js";
 import type { ResourceMap } from "./define-abilities.js";
 import { canMutate, permittedFields, validatePayload } from "./mutation.js";
 import type { PayloadResult } from "./mutation.types.js";
@@ -57,7 +57,7 @@ const NOTHING: Narrowed = {
  */
 export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 	registry: AC,
-	rules: CheckedRules,
+	rules: readonly CheckedRule[],
 	options?: AbilityOptions,
 ): AbilitySet<AC> => {
 	const report = options?.onDecision;
@@ -66,11 +66,13 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 	const buckets = new Map<string, Map<string, Narrowed>>();
 
 	const declared = (action: string, resource: string): boolean => {
-		if (action === MANAGE_ACTION) {
-			return true;
+		const definition = own(registry, resource);
+
+		if (definition === undefined) {
+			return false;
 		}
 
-		return own(registry, resource)?.actions.includes(action) ?? false;
+		return action === MANAGE_ACTION || definition.actions.includes(action);
 	};
 
 	const relevant = (action: string, resource: string): Narrowed => {

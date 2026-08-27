@@ -1,7 +1,7 @@
 import type {
 	AbilitySet,
 	ActionFor,
-	CheckedRules,
+	CheckedRule,
 	ResourceMap,
 	ResourceName,
 	ShapeOf,
@@ -47,7 +47,7 @@ export type ServerCanProps<
 export type AbilityProviderProps<AC extends ResourceMap> = {
 	children?: ReactNode;
 } & (
-	| { rules: CheckedRules; ability?: never }
+	| { rules: readonly CheckedRule[]; ability?: never }
 	| { ability: AbilitySet<AC>; rules?: never }
 );
 
@@ -69,6 +69,6 @@ export type VetoContext<AC extends ResourceMap> = {
 	AbilityProvider: (props: AbilityProviderProps<AC>) => ReactNode;
 	useAbility: () => AbilitySet<AC>;
 	useCan: UseCan<AC>;
-	useSetRules: () => (rules: CheckedRules) => void;
+	useSetRules: () => (rules: readonly CheckedRule[]) => void;
 	Can: <R extends ResourceName<AC>>(props: CanProps<AC, R>) => ReactNode;
 };
