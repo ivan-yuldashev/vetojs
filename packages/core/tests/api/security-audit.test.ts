@@ -241,6 +241,20 @@ describe("security audit", () => {
 		expect(ability.rules).toHaveLength(1);
 	});
 
+	it("F-M: a validated payload does not carry __proto__ through as a field", () => {
+		const ability = buildAbility(ac, [allow("update", "user")]);
+		const data = JSON.parse('{"role":"admin","__proto__":{"isAdmin":true}}');
+
+		const result = ability.validatePayload(
+			"update",
+			"user",
+			{ id: "u", role: "guest" },
+			data,
+		);
+
+		expect(result.ok).toBe(false);
+	});
+
 	it("C: an ordered deny does not fire on an absent value (decidable non-match)", () => {
 		const ability = buildAbility(ac, [
 			allow("update", "txn"),
@@ -277,19 +291,5 @@ describe("open findings — an it.fails turns red once the finding is fixed", ()
 		}
 
 		expect(granted).toBe(false);
-	});
-
-	it.fails("a validated payload does not carry __proto__ through as a field", () => {
-		const ability = buildAbility(ac, [allow("update", "user")]);
-		const data = JSON.parse('{"role":"admin","__proto__":{"isAdmin":true}}');
-
-		const result = ability.validatePayload(
-			"update",
-			"user",
-			{ id: "u", role: "guest" },
-			data,
-		);
-
-		expect(result.ok && Object.hasOwn(result.data, "__proto__")).toBe(false);
 	});
 });

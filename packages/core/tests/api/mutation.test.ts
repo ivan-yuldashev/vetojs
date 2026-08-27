@@ -68,6 +68,25 @@ describe("validatePayload — fields", () => {
 		).toEqual({ ok: true, data: { title: "new", status: "published" } });
 	});
 
+	it("one unrestricted allow opens every field, whatever the narrow ones list", () => {
+		const rules: Rule<Post>[] = [
+			{
+				effect: "allow",
+				action: "update",
+				resource: "post",
+				payload: { fields: ["title"] },
+			},
+			{ effect: "allow", action: "update", resource: "post" },
+		];
+
+		expect(
+			validatePayload(rules, "update", "post", row, { status: "published" }),
+		).toEqual({ ok: true, data: { status: "published" } });
+		expect(
+			permittedFields(rules, "update", "post", ["title", "status"]),
+		).toEqual(["title", "status"]);
+	});
+
 	it("rejects a field outside the allow set", () => {
 		const rules: Rule<Post>[] = [
 			{
