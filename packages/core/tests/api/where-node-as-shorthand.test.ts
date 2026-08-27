@@ -39,10 +39,10 @@ describe("a condition that was already compiled is refused, not re-read", () => 
 		});
 
 		it("says what to pass instead", () => {
+			const compiled = allow("read", "post", { where: { authorId: "u1" } });
+
 			expect(() =>
-				allow("read", "post", {
-					where: asShorthand({ field: "authorId", op: "eq", value: "u1" }),
-				}),
+				allow("update", "post", { where: asShorthand(compiled.where) }),
 			).toThrow(/parseRules/);
 		});
 
@@ -67,7 +67,7 @@ describe("a condition that was already compiled is refused, not re-read", () => 
 		});
 
 		it("refuses one nested inside and, or and not", () => {
-			const leaf = { field: "authorId", op: "eq", value: "u1" };
+			const leaf = allow("read", "post", { where: { authorId: "u1" } }).where;
 
 			for (const where of [{ and: [leaf] }, { or: [leaf] }, { not: leaf }]) {
 				expect(() =>
@@ -80,7 +80,7 @@ describe("a condition that was already compiled is refused, not re-read", () => 
 			expect(() =>
 				allow("read", "post", {
 					where: asShorthand({
-						author: { field: "role", op: "eq", value: "admin" },
+						author: allow("read", "author", { where: { role: "admin" } }).where,
 					}),
 				}),
 			).toThrow(TypeError);
@@ -217,5 +217,55 @@ describe("a condition that was already compiled is refused, not re-read", () => 
 				false,
 			);
 		});
+	});
+});
+
+describe("a resource whose own columns are named after the condition AST", () => {
+	const acRules = defineAbilities({
+		resources: {
+			rule: {
+				schema: shape<{ field: string; op: string; value: string }>(),
+				actions: ["read"],
+			},
+		},
+	});
+
+	const forRules = createRules(acRules);
+
+	it("takes a shorthand naming field, op and value at once", () => {
+		const rule = forRules.allow("read", "rule", {
+			where: { field: "authorId", op: "eq", value: "u1" },
+		});
+
+		expect(rule.where).toEqual({
+			and: [
+				{ field: "field", op: "eq", value: "authorId" },
+				{ field: "op", op: "eq", value: "eq" },
+				{ field: "value", op: "eq", value: "u1" },
+			],
+		});
+	});
+
+	it("answers about a row of that table", () => {
+		const ability = buildAbility(acRules, [
+			forRules.allow("read", "rule", { where: { op: "eq" } }),
+		]);
+
+		expect(
+			ability.can("read", "rule", { field: "authorId", op: "eq", value: "u1" }),
+		).toBe(true);
+		expect(
+			ability.can("read", "rule", { field: "authorId", op: "gt", value: "u1" }),
+		).toBe(false);
+	});
+
+	it("still refuses a condition that rule itself compiled", () => {
+		const compiled = forRules.allow("read", "rule", { where: { op: "eq" } });
+
+		expect(() =>
+			forRules.allow("read", "rule", {
+				where: compiled.where as { op: string },
+			}),
+		).toThrow(TypeError);
 	});
 });

@@ -1,6 +1,11 @@
 import { ruleMatches } from "../evaluation/index.js";
 import type { ConditionNode, Rule } from "../model/index.js";
-import { isPayloadScoped, type Row, RuleEffect } from "../shared/index.js";
+import {
+	isPayloadScoped,
+	isPlainObject,
+	type Row,
+	RuleEffect,
+} from "../shared/index.js";
 import { everything, nothing } from "./vacuous.js";
 
 export const compileWhere = <T extends Row>(
@@ -10,6 +15,7 @@ export const compileWhere = <T extends Row>(
 ): ConditionNode<T> => {
 	const matched = rules.filter((rule) => ruleMatches(rule, action, resource));
 	const allows = matched.filter((rule) => rule.effect === RuleEffect.Allow);
+
 	const denies = matched.filter(
 		(rule) => rule.effect === RuleEffect.Deny && !isPayloadScoped(rule),
 	);
@@ -18,13 +24,13 @@ export const compileWhere = <T extends Row>(
 		return nothing<ConditionNode<T>>();
 	}
 
-	if (denies.some((rule) => rule.where === undefined)) {
+	if (denies.some((rule) => !isPlainObject(rule.where))) {
 		return nothing<ConditionNode<T>>();
 	}
 
 	const orOf = (subset: Rule<T>[]): ConditionNode<T> => {
 		const conditions = subset.flatMap((rule) =>
-			rule.where ? [rule.where] : [],
+			isPlainObject<ConditionNode<T>>(rule.where) ? [rule.where] : [],
 		);
 
 		const [first] = conditions;
@@ -35,9 +41,11 @@ export const compileWhere = <T extends Row>(
 	};
 
 	const allowUnconditional = allows.some((rule) => rule.where === undefined);
+
 	const allowGroup = allowUnconditional
 		? everything<ConditionNode<T>>()
 		: orOf(allows);
+
 	const denyGroup = denies.length === 0 ? undefined : orOf(denies);
 
 	if (denyGroup === undefined) {
