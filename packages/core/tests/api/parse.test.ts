@@ -553,6 +553,21 @@ describe("one grammar, one dispatcher", () => {
 			: never
 		: never;
 
+	it("reads a node naming no shape as a field condition, and says what it lacks", () => {
+		expect(
+			parseRules([
+				{ effect: "allow", action: "read", resource: "post", where: {} },
+			]),
+		).toEqual({
+			ok: false,
+			errors: [
+				"rules[0].where.field: expected a string",
+				"rules[0].where.op: unknown operator undefined",
+				"rules[0].where.value: missing",
+			],
+		});
+	});
+
 	it("names every shape a condition node can take", () => {
 		expectTypeOf<Unnamed<ConditionNode<Record<string, unknown>>>>().toBeNever();
 	});
