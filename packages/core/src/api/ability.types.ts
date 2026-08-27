@@ -137,7 +137,10 @@ export type AbilitySet<AC extends ResourceMap = ResourceMap> = {
  * was turned down as a whole, because no `allow` covered it or a blanket `deny` did, so
  * there was no field left to name.
  *
- * `reason` appears when the refusal never reached the rules at all.
+ * `reason` appears when the refusal never reached the rules at all: `"no row"` when the
+ * guard could not load one, `"not a plain row"` when what was passed is an object the engine
+ * will not read — a class instance from an ORM, a `Date`, an array. The verdict is the usual
+ * fail-closed `false`; the reason is there so the cause is not guessed at.
  *
  * Neither the row nor the data is here. Field names are, in `violations`; values are not,
  * because a decision log is not the place they belong by default. Both are in scope where
@@ -149,7 +152,7 @@ export type DecisionReport = {
 	allowed: boolean;
 	rule?: Rule;
 	violations?: PayloadViolation[];
-	reason?: "no row";
+	reason?: "no row" | "not a plain row";
 };
 
 /**

@@ -18,7 +18,11 @@ import {
 	own,
 	type Row,
 } from "../shared/index.js";
-import type { AbilityOptions, AbilitySet } from "./ability.types.js";
+import type {
+	AbilityOptions,
+	AbilitySet,
+	DecisionReport,
+} from "./ability.types.js";
 import type { CheckedRule, CheckedRules } from "./checked-rules.types.js";
 import type { ResourceMap } from "./define-abilities.js";
 import { canMutate, permittedFields, validatePayload } from "./mutation.js";
@@ -120,17 +124,28 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 		}
 	};
 
+	const unreadable = (instance: unknown): boolean => {
+		return instance !== undefined && !isPlainObject(instance);
+	};
+
 	const answer = (
 		action: string,
 		resource: string,
 		allowed: boolean,
 		settled: Settled<Row>,
+		instance?: unknown,
 	): boolean => {
-		report?.(
-			settled.rule === undefined
-				? { action, resource, allowed }
-				: { action, resource, allowed, rule: settled.rule },
-		);
+		const decision: DecisionReport = { action, resource, allowed };
+
+		if (settled.rule !== undefined) {
+			decision.rule = settled.rule;
+		}
+
+		if (unreadable(instance)) {
+			decision.reason = "not a plain row";
+		}
+
+		report?.(decision);
 
 		return allowed;
 	};
@@ -166,6 +181,7 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 				? mightAllow(only.rules, action, resource, settled)
 				: evaluateRules(only.rules, action, resource, instance, settled, only),
 			settled,
+			instance,
 		);
 	};
 
@@ -196,6 +212,7 @@ export const buildAbility = <AC extends ResourceMap = ResourceMap>(
 				resource,
 				canMutate(only.rules, action, resource, row, settled),
 				settled,
+				row,
 			);
 		},
 		validatePayload: (
