@@ -147,6 +147,38 @@ describe("compileWhere", () => {
 		expect(compileWhere(rules, "read", "post")).toEqual({ and: [] });
 	});
 
+	const broken = (effect: "allow" | "deny", where: unknown): Rule<Post> =>
+		({
+			effect,
+			action: "read",
+			resource: "post",
+			where,
+		}) as unknown as Rule<Post>;
+
+	const notConditions = [null, 42, "garbage", [], true];
+
+	it("reads a where that is not a condition object as no condition at all", () => {
+		for (const where of notConditions) {
+			const label = `where: ${JSON.stringify(where)}`;
+
+			expect(
+				compileWhere([broken("allow", where)], "read", "post"),
+				label,
+			).toEqual({ or: [] });
+			expect(
+				compileWhere(
+					[
+						{ effect: "allow", action: "read", resource: "post" },
+						broken("deny", where),
+					],
+					"read",
+					"post",
+				),
+				label,
+			).toEqual({ or: [] });
+		}
+	});
+
 	it("returns FALSE (empty or) if rules exist but for a different action", () => {
 		const rules: Rule<Post>[] = [
 			{
