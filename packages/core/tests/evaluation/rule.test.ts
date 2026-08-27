@@ -225,6 +225,16 @@ describe("evaluateRules", () => {
 });
 
 describe("mightAllow", () => {
+	it("steps over rules about another pair before reaching the allow", () => {
+		const rules: Rule<Post>[] = [
+			{ effect: "allow", action: "read", resource: "comment" },
+			{ effect: "deny", action: "update", resource: "post" },
+			{ effect: "allow", action: "read", resource: "post" },
+		];
+
+		expect(mightAllow(rules, "read", "post")).toBe(true);
+	});
+
 	it("returns false if there are no rules", () => {
 		expect(mightAllow([], "read", "post")).toBe(false);
 	});

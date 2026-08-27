@@ -221,7 +221,9 @@ describe("parseRules — the vocabulary gate", () => {
 		});
 		const result = parseRules([deny], ac);
 		expect(result.ok && result.rules).toEqual([deny]);
-		expect(result.ok && result.unknown[0]?.quarantined).toBe(false);
+		expect(result.ok && result.unknown[0]).toMatchObject({
+			quarantined: false,
+		});
 	});
 });
 
