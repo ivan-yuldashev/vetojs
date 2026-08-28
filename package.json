@@ -35,7 +35,7 @@
 		"@arethetypeswrong/cli": "0.18.5",
 		"@biomejs/biome": "^2.5.0",
 		"@changesets/cli": "^3.0.1",
-		"@types/node": "^26.2.0",
+		"@types/node": "^26.3.0",
 		"@vitest/coverage-v8": "^4.1.10",
 		"knip": "^6.23.0",
 		"publint": "0.3.24",
