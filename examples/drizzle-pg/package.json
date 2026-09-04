@@ -12,7 +12,7 @@
 		"@vetojs-examples/shared": "workspace:*",
 		"@vetojs/core": "workspace:*",
 		"@vetojs/drizzle": "workspace:*",
-		"@electric-sql/pglite": "^0.5.5",
+		"@electric-sql/pglite": "^0.5.8",
 		"drizzle-orm": "^0.45.2",
 		"pg": "^8.16.0"
 	},
