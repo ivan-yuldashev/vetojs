@@ -53,7 +53,7 @@
 		"drizzle-orm": ">=0.36.0"
 	},
 	"devDependencies": {
-		"@electric-sql/pglite": "^0.5.5",
+		"@electric-sql/pglite": "^0.5.8",
 		"@vetojs/core": "workspace:^",
 		"drizzle-orm": "^0.45.2"
 	}
