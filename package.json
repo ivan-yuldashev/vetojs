@@ -33,16 +33,16 @@
 	},
 	"devDependencies": {
 		"@arethetypeswrong/cli": "0.18.5",
-		"@biomejs/biome": "^2.5.0",
-		"@changesets/cli": "^3.0.1",
+		"@biomejs/biome": "^2.5.14",
+		"@changesets/cli": "^3.0.3",
 		"@types/node": "^26.6.3",
-		"@vitest/coverage-v8": "^4.1.10",
-		"knip": "^6.23.0",
+		"@vitest/coverage-v8": "^5.0.2",
+		"knip": "^6.38.0",
 		"publint": "0.3.24",
-		"simple-git-hooks": "^2.13.1",
+		"simple-git-hooks": "^2.14.0",
 		"tsup": "^8.5.1",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.9"
+		"typescript": "^7.0.2",
+		"vitest": "^5.0.2"
 	},
 	"simple-git-hooks": {
 		"pre-commit": "pnpm exec biome check --staged --no-errors-on-unmatched",
