@@ -3,8 +3,7 @@
 	"compilerOptions": {
 		"jsx": "react-jsx",
 		"paths": {
-			"@vetojs/core": ["./packages/core/src/index.ts"],
-			"@vetojs/core/internal": ["./packages/core/src/internal.ts"]
+			"@vetojs/core": ["./packages/core/src/index.ts"]
 		}
 	},
 	"include": [

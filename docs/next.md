@@ -2,7 +2,7 @@
 
 **[English](next.md) · [Русский](next.ru.md)**
 
-> **This package is no longer maintained.** The guard it contained never imported `next` or `react`, so it now lives in the engine as [`@vetojs/core/guard`](./guard.md) and works the same for HTTP handlers and agent tool calls. `@vetojs/next` remains as a re-export so nothing breaks today, and will receive no further changes.
+> **This package is retired.** The guard it contained never imported `next` or `react`, so it now lives in the engine as [`@vetojs/core/guard`](./guard.md) and works the same for HTTP handlers and agent tool calls. `@vetojs/next@0.2.0` stays on npm as a re-export, so an install that pins it keeps working — but it is built here no longer and will receive no further versions.
 
 ## Moving over
 
