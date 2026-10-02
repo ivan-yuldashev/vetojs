@@ -7,7 +7,6 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      # One PR per area instead of one per package — the toolchain moves together.
       dev-tooling:
         patterns:
           - "@biomejs/*"
@@ -25,7 +24,6 @@ updates:
           - "@types/react"
           - "@types/react-dom"
     ignore:
-      # Peer range is >=18 and CI proves it; a major bump here is a deliberate decision.
       - dependency-name: react
         update-types: [version-update:semver-major]
       - dependency-name: react-dom
