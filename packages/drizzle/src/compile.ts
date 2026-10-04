@@ -149,7 +149,7 @@ const scalarOrThrow = (
 ): unknown => {
 	if (!isScalar(value)) {
 		throw new Error(
-			`@vetojs/drizzle: operator "${op}" on column "${column.name}" got a non-scalar value — objects have no SQL comparison; fix the rule's value.`,
+			`veto: operator "${op}" on column "${column.name}" got a non-scalar value — objects have no SQL comparison; fix the rule's value.`,
 		);
 	}
 
@@ -163,7 +163,7 @@ const membersOrThrow = (
 ): unknown[] => {
 	if (!Array.isArray(value)) {
 		throw new Error(
-			`@vetojs/drizzle: operator "${op}" on column "${column.name}" requires an array value in the rule — received ${typeof value}. parseRules rejects such rules; fix the hand-built one.`,
+			`veto: operator "${op}" on column "${column.name}" requires an array value in the rule — received ${typeof value}. parseRules rejects such rules; fix the hand-built one.`,
 		);
 	}
 
@@ -183,7 +183,7 @@ const arrayMembership = (
 
 	if (members.some((member) => member === null)) {
 		throw new Error(
-			`@vetojs/drizzle: operator "${op}" on column "${column.name}" got a null member — array membership against NULL has no honest SQL form.`,
+			`veto: operator "${op}" on column "${column.name}" got a null member — array membership against NULL has no honest SQL form.`,
 		);
 	}
 
@@ -309,7 +309,7 @@ const compileField = (
 
 	if (compare === undefined) {
 		throw new Error(
-			`@vetojs/drizzle: operator "${op}" on column "${column.name}" has no SQL translation — the engine answers it as unknown, which an allow and a deny read differently, and no single predicate is both.`,
+			`veto: operator "${op}" on column "${column.name}" has no SQL translation — the engine answers it as unknown, which an allow and a deny read differently, and no single predicate is both.`,
 		);
 	}
 
@@ -332,6 +332,40 @@ const compileField = (
 	return ORDERING.includes(op) ? unknownOnNaN(column, predicate) : predicate;
 };
 
+type ColumnComparison = (left: Column, right: Column) => SQL;
+
+const REF_COMPARISONS: Partial<Record<ConditionOperator, ColumnComparison>> = {
+	[ConditionOperator.Equal]: eq,
+	[ConditionOperator.NotEqual]: ne,
+	[ConditionOperator.GreaterThan]: gt,
+	[ConditionOperator.GreaterThanOrEqual]: gte,
+	[ConditionOperator.LessThan]: lt,
+	[ConditionOperator.LessThanOrEqual]: lte,
+};
+
+const compileRef = (
+	left: Column,
+	op: ConditionOperator,
+	right: Column,
+): SQL => {
+	const compare = own(REF_COMPARISONS, op);
+
+	if (compare === undefined) {
+		throw new Error(
+			`veto: operator "${op}" cannot compare column "${left.name}" with column "${right.name}" — parseRules refuses such rules; fix the hand-built one.`,
+		);
+	}
+
+	const nan = [left, right]
+		.filter(holdsNaN)
+		.map((column) => sql`${column} = 'NaN'`);
+	const predicate = compare(left, right);
+
+	return nan.length === 0
+		? predicate
+		: sql`case when ${or(...nan)} then null::boolean else ${predicate} end`;
+};
+
 export type JoinPredicate = (parent: Table, child: Table) => SQL;
 
 export type JoinResolution = { join: JoinPredicate } | { unavailable: string };
@@ -350,7 +384,7 @@ export type CompileEnv = (
 
 const noRelations: CompileEnv = (_from, relation) => {
 	throw new Error(
-		`@vetojs/drizzle: relation "${relation}" requires a table map — use defineTables(...).filter(...) instead of toDrizzle.`,
+		`veto: relation "${relation}" requires a table map — use defineTables(...).filter(...) instead of toDrizzle.`,
 	);
 };
 
@@ -401,7 +435,7 @@ const compileRelation = (
 			return notExists(subquery(inner));
 		default:
 			throw new Error(
-				`@vetojs/drizzle: relation "${relation}" uses quantifier "${quantifier}", which the engine answers as unknown — an allow grants nothing while a deny fires, and no single SQL predicate is both.`,
+				`veto: relation "${relation}" uses quantifier "${quantifier}", which the engine answers as unknown — an allow grants nothing while a deny fires, and no single SQL predicate is both.`,
 			);
 	}
 };
@@ -431,7 +465,7 @@ const compileNode = (
 
 	if (!owns(node, "field") || !("field" in node)) {
 		throw new Error(
-			`@vetojs/drizzle: a condition on table "${getTableName(frame.table)}" names no shape the engine knows — it is neither a field, a relation, nor and/or/not.`,
+			`veto: a condition on table "${getTableName(frame.table)}" names no shape the engine knows — it is neither a field, a relation, nor and/or/not.`,
 		);
 	}
 
@@ -444,8 +478,20 @@ const compileNode = (
 				: `table "${getTableName(frame.table)}" (resource "${frame.resource}")`;
 
 		throw new Error(
-			`@vetojs/drizzle: column "${String(node.field)}" does not exist in ${where}.`,
+			`veto: column "${String(node.field)}" does not exist in ${where}.`,
 		);
+	}
+
+	if (owns(node, "ref")) {
+		const other = own(frame.columns, node.ref);
+
+		if (other === undefined) {
+			throw new Error(
+				`veto: column "${String(node.ref)}" does not exist in table "${getTableName(frame.table)}".`,
+			);
+		}
+
+		return compileRef(column, node.op, other);
 	}
 
 	return compileField(column, node.op, node.value);

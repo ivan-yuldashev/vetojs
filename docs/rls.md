@@ -9,7 +9,7 @@ RLS and this library answer different halves of the same question. Postgres deci
 | | RLS | veto |
 |---|---|---|
 | Which rows a query returns | ✅ enforced by the database | ✅ compiled into `WHERE` |
-| Which fields may be written | ✖ `GRANT UPDATE (col)` binds to a role, not to an actor or a row | ✅ `payload.fields` and value constraints |
+| Which fields may be written | ✖ `GRANT UPDATE (col)` binds to a role, not to an actor or a row | ✅ `fields` and value constraints |
 | Gating the UI | ✖ nothing crosses to the browser | ✅ rules ship as JSON |
 | A resource with no table | ✖ nothing to attach a policy to | ✅ an ordinary rule |
 | Anything but Postgres | ✖ | ✅ |

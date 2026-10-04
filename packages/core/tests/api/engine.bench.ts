@@ -1,11 +1,7 @@
 import { bench, describe } from "vitest";
-import { validatePayload } from "../../src/api/mutation.js";
-import { compileWhere } from "../../src/api/where.js";
-import {
-	evaluateCondition,
-	evaluateRules,
-} from "../../src/evaluation/index.js";
+import { compileMatcher } from "../../src/compile/index.js";
 import type { ConditionNode, Rule } from "../../src/model/index.js";
+import { evaluateRules, select, validatePayload } from "../select.js";
 
 type Post = { authorId: string; status: string; views: number };
 
@@ -24,14 +20,12 @@ const mutationRules: Rule<Doc>[] = Array.from({ length: 20 }, (_, index) => ({
 	effect: index % 4 === 0 ? "deny" : "allow",
 	action: "update",
 	resource: "doc",
-	payload: {
-		fields: ["a", "b", "c", "d", "e"],
-		constraints: {
-			and: [
-				{ field: "a", op: "gte", value: 0 },
-				{ field: "b", op: "lte", value: 100 },
-			],
-		},
+	fields: ["a", "b", "c", "d", "e"],
+	values: {
+		and: [
+			{ field: "a", op: "gte", value: 0 },
+			{ field: "b", op: "lte", value: 100 },
+		],
 	},
 }));
 
@@ -59,18 +53,18 @@ const postWithComments: PostWithComments = {
 
 describe("engine", () => {
 	bench("evaluateRules over 50 rules", () => {
-		evaluateRules(rules, "read", "post", instance);
+		evaluateRules(select(rules, "read", "post"), instance);
 	});
 
 	bench("compileWhere over 50 rules", () => {
-		compileWhere(rules, "read", "post");
+		select(rules, "read", "post").where;
 	});
 
 	bench("validatePayload: 20 rules x 5-key payload", () => {
-		validatePayload(mutationRules, "update", "doc", docRow, docPayload);
+		validatePayload(select(mutationRules, "update", "doc"), docRow, docPayload);
 	});
 
 	bench("evaluateCondition: relation over 100 items (every)", () => {
-		evaluateCondition(relationNode, postWithComments);
+		compileMatcher(relationNode)(postWithComments);
 	});
 });

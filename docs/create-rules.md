@@ -11,11 +11,10 @@ const { allow, deny } = createRules(ac);
 
 const policyFor = (actor: User) => [
 	allow("read", "post", { where: { status: "published" } }),
-	allow(["update", "publish"], "post", {
+	allow(["update", "publish"], { post: ["title", "content", "status"] }, {
 		where: { authorId: actor.id },
-		payload: { fields: ["title", "content", "status"] },
 	}),
-	deny("update", "post", { payload: { fields: ["featured"] } }),
+	deny("update", { post: ["featured"] }),
 ];
 ```
 
@@ -35,29 +34,20 @@ The resource argument drives it: from `"post"` the factory infers which actions 
 
 ## Options
 
-```ts
-allow(action, resource, {
-	where,     // which rows — fields, operators, and relations (nested)
-	payload: {
-		fields,      // which fields may be written
-		constraints, // which values those fields may take
-	},
-});
+```
+allow(action, resource,             { where })
+allow(action, { resource: fields }, { where, values })
+//             ^^^^^^^^^^^^^^^^^^     ^^^^^  ^^^^^^
+//             which fields           which  which values
+//             (the resource alone    rows   those fields
+//              means all of them)           may take
 ```
 
-`where` accepts the nested shorthand described in [conditions](./conditions.md) and [relations](./relations.md); `constraints` accepts the flat field shorthand ([condition shorthand](./condition-shorthand.md)). Both are compiled to plain JSON immediately, so what you get back is data, not a builder.
-
-Relations nest three levels deep by default. Raise it if your schema is deeper:
-
-```ts
-const { allow } = createRules(ac, { maxDepth: 5 });
-```
-
-The limit exists to keep TypeScript's inference fast — each level multiplies the work the compiler does on every `where`.
+`where` accepts the nested shorthand described in [conditions](./conditions.md) and [relations](./relations.md); `values` accepts the flat field shorthand ([condition shorthand](./condition-shorthand.md)). Both are compiled to plain JSON immediately, so what you get back is data, not a builder.
 
 ## Rules carry proof of where they came from
 
-`buildAbility` accepts only rules that went through a check — either these factories (verified by the compiler) or [`parseRules`](./parse.md) with a vocabulary (verified at runtime). A hand-written rule literal will not compile:
+`buildAbility` accepts only rules that went through a check — either these factories (verified by the compiler) or [`parseRules`](./parse.md) (verified at runtime). A hand-written rule literal will not compile:
 
 ```ts
 buildAbility(ac, [{ effect: "allow", action: "read", resource: "post" }]); // ✗
@@ -94,4 +84,4 @@ Same verdicts, and the size stops tracking the tenant count. On the example poli
 
 ## Source
 
-[`api/create-rules.ts`](../packages/core/src/api/create-rules.ts) · [tests](../packages/core/tests/api/create-rules.test.ts)
+[`create/create-rules.ts`](../packages/core/src/create/create-rules.ts) · [tests](../packages/core/tests/create/create-rules.test.ts)

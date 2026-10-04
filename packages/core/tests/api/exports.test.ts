@@ -1,12 +1,8 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { buildAbility } from "../../src/api/ability.js";
-import type {
-	CheckedRule,
-	CheckedRules,
-} from "../../src/api/checked-rules.types.js";
-import { createRules } from "../../src/api/create-rules.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { shape, type } from "../../src/api/index.js";
+import { buildAbility } from "../../src/api/index.js";
+import { createRules, defineAbilities, shape } from "../../src/create/index.js";
+import type { EnvDeclared, EnvOf } from "../../src/index.js";
+import type { CheckedRule, CheckedRules } from "../../src/model/index.js";
 
 type Post = { id: string; authorId: string };
 
@@ -22,18 +18,15 @@ describe("the names the package exports", () => {
 		expect(one.resource).toBe("post");
 	});
 
-	it("declares a shape under either name", () => {
-		const viaType = defineAbilities({
-			resources: { post: { schema: type<Post>(), actions: ["read"] } },
-		});
-		const viaShape = defineAbilities({
+	it("names the environment a declaration carries, so the declaration can be exported", () => {
+		const ac = defineAbilities({
+			env: shape<{ hour: number }>(),
 			resources: { post: { schema: shape<Post>(), actions: ["read"] } },
 		});
 
-		expect(shape).toBe(type);
-		expect(buildAbility(viaShape, []).rules).toEqual(
-			buildAbility(viaType, []).rules,
-		);
+		expectTypeOf(ac).toExtend<EnvDeclared>();
+		expectTypeOf<EnvOf<typeof ac>>().toEqualTypeOf<{ hour: number }>();
+		expect(Object.keys(ac)).toEqual(["post"]);
 	});
 
 	it("keeps the row shape when the schema was declared as a shape", () => {

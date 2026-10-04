@@ -9,7 +9,7 @@ export class RelationNotLoadedError extends Error {
 
 	constructor(relation: string) {
 		super(
-			`Relation "${relation}" is referenced by a condition but is not loaded on the instance. Load it (include/with) before checking.`,
+			`Relation "${relation}" is referenced by a condition but is not loaded on the row. Load it (include/with) before checking.`,
 		);
 
 		this.name = "RelationNotLoadedError";

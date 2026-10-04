@@ -1,6 +1,6 @@
 # Veto
 
-> Type-safe authorization for TypeScript with no classes and no hidden state. A policy is a pure function of the user returning an array of rules — plain JSON. Rules cross the server/client boundary untouched, compile to a SQL `WHERE`, and fail closed on malformed data. The engine has no runtime dependencies.
+> Authorization for TypeScript apps and the AI agents working in them. A policy is a pure function of the user returning an array of rules — plain JSON. The same array answers `can()`, compiles to a SQL `WHERE`, checks writes field by field and guards an agent's tool calls for the person the agent acts for; it crosses the server/client boundary untouched and fails closed on malformed data. The engine has no runtime dependencies.
 
 Install `@vetojs/core` for the engine; add `@vetojs/react` for `<Can>` / `useAbility` bindings, `@vetojs/core/guard` to guard a server action, an HTTP handler or a tool call, or `@vetojs/drizzle` to filter a query in SQL. ESM only, Node 20+.
 

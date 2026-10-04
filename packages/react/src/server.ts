@@ -20,9 +20,9 @@ export const Can = <AC extends ResourceMap, R extends ResourceName<AC>>({
 	ability,
 	I,
 	a,
-	this: instance,
+	this: row,
 	children,
 	fallback = null,
 }: ServerCanProps<AC, R>): ReactNode => {
-	return ability.can(I, a, instance) ? children : fallback;
+	return ability.can(I, a, row) ? children : fallback;
 };

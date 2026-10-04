@@ -25,6 +25,7 @@ export const posts: Post[] = [
 		status: "published",
 		title: "Launch day",
 		views: 250,
+		slug: "launch-day",
 	},
 	{
 		id: "wip-notes",
@@ -33,6 +34,7 @@ export const posts: Post[] = [
 		status: "draft",
 		title: "WIP notes",
 		views: 300,
+		slug: "wip-notes",
 	},
 	{
 		id: "alice-draft",
@@ -41,6 +43,7 @@ export const posts: Post[] = [
 		status: "draft",
 		title: "Alice's draft",
 		views: 4,
+		slug: "alices-draft",
 	},
 	{
 		id: "old-announce",
@@ -49,6 +52,7 @@ export const posts: Post[] = [
 		status: "published",
 		title: "Old announcement",
 		views: 80,
+		slug: "old-announcement",
 	},
 	{
 		id: "old-draft",
@@ -57,6 +61,7 @@ export const posts: Post[] = [
 		status: "draft",
 		title: "Never finished",
 		views: 0,
+		slug: "never-finished",
 	},
 ];
 

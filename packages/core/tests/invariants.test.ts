@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { compileWhere } from "../src/api/index.js";
+import { compileMatcher } from "../src/compile/index.js";
+import type { Rule } from "../src/model/index.js";
 import {
 	canMutate,
+	evaluateRules,
 	permittedFields,
+	select,
 	validatePayload,
-} from "../src/api/mutation.js";
-import { evaluateCondition, evaluateRules } from "../src/evaluation/index.js";
-import type { Rule } from "../src/model/index.js";
+} from "./select.js";
 
 type Post = {
 	tags?: unknown;
@@ -59,7 +60,7 @@ const allowVariants: { name: string; rule: Rule<Post> }[] = [
 			action: "update",
 			resource: "post",
 			where: { field: "authorId", op: "eq", value: "u1" },
-			payload: { fields: ["status", "views"] },
+			fields: ["status", "views"],
 		},
 	},
 	{
@@ -68,10 +69,8 @@ const allowVariants: { name: string; rule: Rule<Post> }[] = [
 			effect: "allow",
 			action: "update",
 			resource: "post",
-			payload: {
-				fields: ["status"],
-				constraints: { field: "status", op: "eq", value: "draft" },
-			},
+			fields: ["status"],
+			values: { field: "status", op: "eq", value: "draft" },
 		},
 	},
 ];
@@ -92,16 +91,12 @@ const denyVariants: { name: string; rule?: Rule<Post> }[] = [
 		},
 	},
 	{
-		name: "deny empty payload",
-		rule: { effect: "deny", action: "update", resource: "post", payload: {} },
-	},
-	{
 		name: "deny payload fields",
 		rule: {
 			effect: "deny",
 			action: "update",
 			resource: "post",
-			payload: { fields: ["status"] },
+			fields: ["status"],
 		},
 	},
 	{
@@ -110,7 +105,7 @@ const denyVariants: { name: string; rule?: Rule<Post> }[] = [
 			effect: "deny",
 			action: "update",
 			resource: "post",
-			payload: { constraints: { field: "status", op: "eq", value: "draft" } },
+			values: { field: "status", op: "eq", value: "draft" },
 		},
 	},
 	{
@@ -147,7 +142,7 @@ const denyVariants: { name: string; rule?: Rule<Post> }[] = [
 			action: "update",
 			resource: "post",
 			where: { field: "status", op: "eq", value: "archived" },
-			payload: { fields: ["status"] },
+			fields: ["status"],
 		},
 	},
 ];
@@ -178,7 +173,7 @@ const samples: Record<string, unknown[]> = {
 const reachesTheValueGate = (rules: Rule<Post>[], field: keyof Post) =>
 	rows.some((row) =>
 		(samples[field as string] ?? []).some((value) => {
-			const result = validatePayload(rules, "update", "post", row, {
+			const result = validatePayload(select(rules, "update", "post"), row, {
 				[field]: value,
 			});
 
@@ -197,11 +192,14 @@ describe("invariants over generated rule shapes", () => {
 	describe("where() selects exactly the rows can() allows", () => {
 		for (const { name, rules } of combinations) {
 			it(name, () => {
-				const condition = compileWhere(rules, "update", "post");
+				const condition = select(rules, "update", "post").where;
 
 				for (const row of rows) {
-					const walk = evaluateRules(rules, "update", "post", row);
-					const query = evaluateCondition(condition, row as never);
+					const walk = evaluateRules(
+						select(rules, "update", "post"),
+						row,
+					).allowed;
+					const query = compileMatcher(condition)(row as never);
 
 					expect(query === true, `row ${JSON.stringify(row)}`).toBe(walk);
 				}
@@ -212,17 +210,15 @@ describe("invariants over generated rule shapes", () => {
 	describe("permittedFields never offers a field the write refuses by name", () => {
 		for (const { name, rules } of combinations) {
 			it(name, () => {
-				for (const field of permittedFields(
-					rules,
-					"update",
-					"post",
+				const offered = permittedFields(
+					select(rules, "update", "post"),
 					universe,
-				)) {
-					expect(
-						reachesTheValueGate(rules, field),
-						`${String(field)}: offered, yet every row answers "field not permitted"`,
-					).toBe(true);
-				}
+				);
+
+				expect(
+					offered.filter((field) => !reachesTheValueGate(rules, field)),
+					'offered, yet every row answers "field not permitted"',
+				).toEqual([]);
 			});
 		}
 	});
@@ -230,27 +226,39 @@ describe("invariants over generated rule shapes", () => {
 	describe("the row gate and the payload gate agree", () => {
 		for (const { name, rules } of combinations) {
 			it(name, () => {
+				const disagreements: string[] = [];
+
 				for (const row of rows) {
-					const mayTouchRow = canMutate(rules, "update", "post", row);
+					const mayTouchRow = canMutate(
+						select(rules, "update", "post"),
+						row,
+					).allowed;
 
 					for (const data of payloads) {
-						const result = validatePayload(rules, "update", "post", row, data);
+						const result = validatePayload(
+							select(rules, "update", "post"),
+							row,
+							data,
+						);
 						const context = `row ${JSON.stringify(row)} data ${JSON.stringify(data)}`;
 
-						if (!mayTouchRow) {
-							expect(result.ok, `${context}: refused row accepted data`).toBe(
-								false,
-							);
+						if (!mayTouchRow && result.ok) {
+							disagreements.push(`${context}: refused row accepted data`);
 						}
 
-						if (result.ok === false && result.violations.length === 0) {
-							expect(
-								mayTouchRow,
+						if (
+							mayTouchRow &&
+							result.ok === false &&
+							result.violations.length === 0
+						) {
+							disagreements.push(
 								`${context}: blanket veto with the row allowed`,
-							).toBe(false);
+							);
 						}
 					}
 				}
+
+				expect(disagreements).toEqual([]);
 			});
 		}
 	});

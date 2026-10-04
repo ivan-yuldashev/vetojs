@@ -37,9 +37,9 @@ pnpm --filter @vetojs/core test          # ✗ "No projects were found"
 
 **Types live in `.types.ts`, values in the implementation file.** The barrel (`api/index.ts`) exports values from implementation files and types from `.types.ts` — not both paths for one type, or knip will flag the dead one.
 
-**Domain vocabulary is constants, not string literals.** `RuleEffect.Deny`, `RelationKind.One`, `MatchQuantifier.Some`, `MANAGE_ACTION` live in `shared/constants/`. Comparisons in logic use them; discriminants in type unions stay literal.
+**Domain vocabulary is constants, not string literals.** `RuleEffect.Deny`, `RelationKind.One`, `MatchQuantifier.Some`, `MANAGE_ACTION` live in `model/`. Comparisons in logic use them; discriminants in type unions stay literal.
 
-**Layering is one-directional:** `model` / `errors` / `shared` ← `evaluation` ← `api`. Nothing imports upward.
+**Layering is one-directional:** `model` / `errors` ← `shared` / `verdict` / `row` ← `compile` ← `check` ← `api` ← `guard`. `create` and `validate` sit on `model` / `shared`; `api` and `guard` read `create`, and `validate` is reached only through `src/index.ts`. Nothing imports upward.
 
 ## The property that must not break
 
@@ -68,4 +68,4 @@ packages/react    <Can>, useAbility, AbilityProvider
 docs/             one page per concept, en + ru
 ```
 
-A local tree may also carry `internal/` — design notes, the Drizzle and Next adapters, and the demo apps. The whole directory is gitignored and absent from the branch, so a clean clone will not have it. Do not add references to it from anything under `docs/`, `README*.md` or `packages/` — those links would be broken for everyone else.
+A local tree may also carry `internal/` — design notes and maintainer scripts. The whole directory is gitignored and absent from the branch, so a clean clone will not have it. Do not add references to it from anything under `docs/`, `README*.md` or `packages/` — those links would be broken for everyone else.

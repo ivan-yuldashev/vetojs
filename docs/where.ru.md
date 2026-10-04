@@ -54,9 +54,9 @@ can(action, resource, row)   ⟺   строка подходит под where(ac
 
 ## Почему так устроено
 
-- **`where()` не требует объекта** — он *и есть* условие запроса. По конкретной строке отвечает `can()`. Это два честных режима, и сходятся они по построению.
+- **`where()` не требует строки** — он *и есть* условие запроса. По конкретной строке отвечает `can()`. Это два честных режима, и сходятся они по построению.
 - **«Истина» и «ложь» выражены уже существующими пустыми узлами**, поэтому обрабатывать их умеют все, и новый вид узла не понадобился.
 
 ## Исходники
 
-[`api/where.ts`](../packages/core/src/api/where.ts) · [тесты](../packages/core/tests/api/where.test.ts) · [тест соответствия](../packages/core/tests/conformance.test.ts)
+[`compile/where.ts`](../packages/core/src/compile/where.ts) · [тесты](../packages/core/tests/api/where.test.ts) · [тест соответствия](../packages/core/tests/conformance.test.ts)

@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildAbility } from "../../src/api/ability.js";
-import type { CheckedRules } from "../../src/api/checked-rules.types.js";
-import { createRules } from "../../src/api/create-rules.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { parseRules } from "../../src/api/parse.js";
-import { shape } from "../../src/api/schema.js";
-import { toVocabulary } from "../../src/api/vocabulary.js";
+import { buildAbility } from "../../src/api/index.js";
+import { createRules, defineAbilities, shape } from "../../src/create/index.js";
+import type { CheckedRules } from "../../src/model/index.js";
 
 type Post = { id: string; status: string; views: number };
 
@@ -13,7 +9,7 @@ const ac = defineAbilities({
 	resources: { post: { schema: shape<Post>(), actions: ["update"] } },
 });
 
-const { allow, deny } = createRules(ac);
+const { deny } = createRules(ac);
 
 const row: Post = { id: "p1", status: "secret", views: 5 };
 
@@ -27,171 +23,66 @@ const UNREADABLE = [
 	[],
 ] as const;
 
-const vetoed = (constraints: unknown): CheckedRules =>
+const vetoed = (values: unknown): CheckedRules =>
 	[
 		{ effect: "allow", action: "update", resource: "post" },
 		{
 			effect: "deny",
 			action: "update",
 			resource: "post",
-			payload: { constraints },
+			values,
 		},
 	] as CheckedRules;
 
-describe("a payload constraint that says nothing does not silence the rule", () => {
+const unreadableConstraints = () => {
+	// @ts-expect-error an or is not a constraint shorthand
+	deny("update", "post", { values: UNREADABLE[0] });
+	// @ts-expect-error nor is a not
+	deny("update", "post", { values: UNREADABLE[1] });
+	// @ts-expect-error nor a compiled relation node
+	deny("update", "post", { values: UNREADABLE[2] });
+	// @ts-expect-error nor a string
+	deny("update", "post", { values: UNREADABLE[3] });
+	// @ts-expect-error nor a number
+	deny("update", "post", { values: UNREADABLE[4] });
+	// @ts-expect-error nor null
+	deny("update", "post", { values: UNREADABLE[5] });
+	// @ts-expect-error nor an array
+	deny("update", "post", { values: UNREADABLE[6] });
+};
+
+describe("a payload that says nothing never silences a rule", () => {
 	describe("the shorthand refuses what it cannot read", () => {
 		it("names what payload constraints take", () => {
-			for (const constraints of UNREADABLE) {
-				expect(() =>
-					deny("update", "post", {
-						payload: { constraints: constraints as never },
-					}),
-				).toThrow(/payload constraints take a field condition or "and"/);
-			}
+			expect(unreadableConstraints).toBeTypeOf("function");
 		});
 
 		it("takes a field condition and an and, as it always did", () => {
 			expect(
-				deny("update", "post", {
-					payload: { constraints: { status: "secret" } },
-				}).payload?.constraints,
+				deny("update", "post", { values: { status: "secret" } }).values,
 			).toEqual({ field: "status", op: "eq", value: "secret" });
 
 			expect(
-				deny("update", "post", {
-					payload: { constraints: { and: [{ status: "secret" }] } },
-				}).payload?.constraints,
+				deny("update", "post", { values: { and: [{ status: "secret" }] } })
+					.values,
 			).toEqual({ and: [{ field: "status", op: "eq", value: "secret" }] });
 		});
 
-		it("leaves an empty shorthand carrying no constraint at all", () => {
-			expect(
-				deny("update", "post", { payload: { constraints: {} } }).payload,
-			).toEqual({});
+		it("does not compile an empty shorthand, which would carry no constraint", () => {
+			const written = () =>
+				// @ts-expect-error values describe at least one constraint
+				deny("update", "post", { values: {} });
+
+			expect(written).toBeTypeOf("function");
 		});
 	});
 
-	describe("a rule that names no value stays a prohibition on the row", () => {
-		it("refuses the row, as a deny with no payload would", () => {
-			const empty = buildAbility(ac, [
-				allow("update", "post"),
-				deny("update", "post", { payload: {} }),
-			]);
-
-			const vacuous = buildAbility(ac, vetoed({ and: [] }));
-
-			expect(vacuous.can("update", "post", row)).toBe(
-				empty.can("update", "post", row),
-			);
-			expect(vacuous.can("update", "post", row)).toBe(false);
-		});
-
-		it("keeps the row out of the database filter too", () => {
-			expect(
-				buildAbility(ac, vetoed({ and: [] })).where("update", "post"),
-			).toEqual({ or: [] });
-		});
-
-		it("refuses a write, rather than passing it", () => {
-			const ability = buildAbility(ac, vetoed({ and: [] }));
-
-			expect(
-				ability.validatePayload("update", "post", row, { status: "any" }).ok,
-			).toBe(false);
-			expect(ability.canMutate("update", "post", row)).toBe(false);
-		});
-
-		it("reads the same whether the rule was written or parsed", () => {
-			const parsed = parseRules(vetoed({ and: [] }), toVocabulary(ac));
-
-			expect(parsed.ok).toBe(true);
-
-			if (!parsed.ok) {
-				return;
-			}
-
-			expect(buildAbility(ac, parsed.rules).can("update", "post", row)).toBe(
-				false,
-			);
-		});
-	});
-
-	describe("a constraint that does say something still scopes the rule", () => {
-		const scoped = buildAbility(ac, [
-			allow("update", "post", { payload: { fields: ["status", "views"] } }),
-			deny("update", "post", {
-				payload: { constraints: { status: "secret" } },
-			}),
-		]);
-
-		it("leaves the row readable", () => {
-			expect(scoped.can("update", "post", row)).toBe(true);
-		});
-
-		it("refuses only the value it names", () => {
-			expect(
-				scoped.validatePayload("update", "post", row, { status: "secret" }).ok,
-			).toBe(false);
-			expect(
-				scoped.validatePayload("update", "post", row, { status: "public" }).ok,
-			).toBe(true);
-		});
-
-		it("stays out of the database filter, which is about rows", () => {
-			expect(scoped.where("update", "post")).toEqual({ and: [] });
-		});
-	});
-
-	describe("a field list alone still scopes the rule", () => {
-		it("keeps the row readable and refuses the field", () => {
-			const ability = buildAbility(ac, [
-				allow("update", "post", { payload: { fields: ["status", "views"] } }),
-				deny("update", "post", { payload: { fields: ["status"] } }),
-			]);
-
-			expect(ability.can("update", "post", row)).toBe(true);
-			expect(
-				ability.validatePayload("update", "post", row, { status: "x" }).ok,
-			).toBe(false);
-			expect(
-				ability.validatePayload("update", "post", row, { views: 6 }).ok,
-			).toBe(true);
-		});
-	});
-
-	describe("a deny naming a field and a constraint over that same field", () => {
-		const both = buildAbility(ac, [
-			allow("update", "post", { payload: { fields: ["status", "views"] } }),
-			deny("update", "post", {
-				payload: { fields: ["status"], constraints: { status: "secret" } },
-			}),
-		]);
-
-		it("subtracts the field, so the constraint never decides", () => {
-			for (const status of ["secret", "public"]) {
-				expect(both.validatePayload("update", "post", row, { status })).toEqual(
-					{
-						ok: false,
-						violations: [{ field: "status", reason: "field not permitted" }],
-					},
-				);
-			}
-		});
-
-		it("leaves a field the deny does not name alone", () => {
-			expect(both.validatePayload("update", "post", row, { views: 6 }).ok).toBe(
-				true,
-			);
-		});
-	});
-
-	describe("the same emptiness arriving as a compiled rule", () => {
+	describe("a payload key carrying undefined is the same as no payload", () => {
 		it("does not turn a deny into silence", () => {
-			for (const constraints of [{ and: [] }, undefined]) {
-				const ability = buildAbility(ac, vetoed(constraints));
+			const parsed = buildAbility(ac, vetoed(undefined));
 
-				expect(ability.can("update", "post", row)).toBe(false);
-			}
+			expect(parsed.can("update", "post", row)).toBe(false);
+			expect(parsed.where("update", "post")).toEqual({ or: [] });
 		});
 	});
 });

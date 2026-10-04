@@ -25,7 +25,9 @@ await db.update(posts).set(result.data).where(eq(posts.id, row.id));
 
 ## `canMutate` — the row
 
-Exactly the same decision as `can` with an instance: does an `allow` apply to this row, and does no `deny` override it. See [rule evaluation](./rule-evaluation.md).
+Exactly the same decision as `can` with a row: does an `allow` apply to this row, and does no `deny` override it. See [rule evaluation](./rule-evaluation.md).
+
+Without a row — a create — it grants only what no row could change, the way `authorize` does: an `allow` with no `where` covers the action, and no `deny` reads the row.
 
 ## `validatePayload` — the data
 
@@ -35,6 +37,14 @@ ability.validatePayload(action, resource, row, data);
 ```
 
 It takes the **row** as well as the data, because which rules apply depends on the row — a rule that only covers drafts shouldn't constrain a write to a published post. A row that no `allow` covers is refused outright, empty data included: with nothing to write there is nothing to object to, and answering `ok` there would be a pass on a row the actor may not touch.
+
+For a create there is no row yet, and that is spelled `undefined` — the same way `canMutate` takes it:
+
+```ts
+ability.validatePayload("create", "post", undefined, data);
+```
+
+The field and value levels still answer; an `allow` conditioned on rows cannot be shown to apply and so grants nothing. Do not hand it the record you are about to insert instead: a candidate assembled from the request is not a row, and judging row conditions by it asks the policy about data the caller supplied.
 
 Rejections are **explicit**. Nothing is silently stripped: if a key isn't allowed you get told which one and why, so your API can answer with a real error instead of quietly saving less than the user asked for.
 
@@ -60,12 +70,9 @@ For each key that passed the field check:
 Allow constraints are alternatives — satisfying any one of them is enough. Deny constraints veto outright.
 
 ```ts
-allow("update", "post", {
+allow("update", { post: ["title", "status"] }, {
 	where: { authorId: actor.id },
-	payload: {
-		fields: ["title", "status"],
-		constraints: { status: { in: ["draft"] } },
-	},
+	values: { status: { in: ["draft"] } },
 });
 
 // { title: "New title" }      → ok
@@ -79,10 +86,10 @@ Note the difference between the last two: `status` is a field Bob may write, jus
 ## Why it works this way
 
 - **One violation per field.** A key rejected by the field check isn't also reported as a value problem — you get the first, most specific reason.
-- **A blanket `deny` vetoes the whole write**, even one carrying an otherwise-valid payload. A prohibition on the action can't be worked around by sending only permitted fields. "Blanket" means it carries no `payload` of its own.
-- **A `deny` that carries a `payload` speaks about data, not rows.** It subtracts fields and values from what may be written and leaves `can` / `canMutate` untouched. Read the other way, a rule meaning "never this field" would mean "never this action", and the field restriction could never be reached — the write would already be refused a step earlier. A `where` on such a rule scopes which rows the field restriction applies to, and still doesn't decide the row.
-- **On a `deny`, `fields` and `constraints` do not combine.** A field named in `fields` is subtracted outright, so a constraint over that same field is never reached. Write "this value is forbidden" with `constraints` alone; add `fields` only to forbid the key whatever it carries.
-- **Value constraints stay flat** (fields and `and` only). "This value is forbidden" is a `deny` rule, not an `or`/`not` expression buried in a constraint — see [condition shorthand](./condition-shorthand.md). Flat still means one shape per node: a constraint naming a field *and* an `and` beside it is refused by [`parseRules`](./parse.md), because the reader takes the group and would drop the field. In TypeScript the other shapes never reach that check — `payload.constraints` is typed as a field condition, so `or`, `not` and `relation` are compile errors; the refusal at runtime is there for JavaScript and for a rule that arrived past the types.
+- **A blanket `deny` vetoes the whole write**, even one carrying an otherwise-valid payload. A prohibition on the action can't be worked around by sending only permitted fields. "Blanket" means it carries no `fields` or `values` of its own.
+- **A `deny` that carries `fields` or `values` speaks about data, not rows.** It subtracts fields and values from what may be written and leaves `can` / `canMutate` untouched. Read the other way, a rule meaning "never this field" would mean "never this action", and the field restriction could never be reached — the write would already be refused a step earlier. A `where` on such a rule scopes which rows the field restriction applies to, and still doesn't decide the row.
+- **On a `deny`, `fields` and `values` do not combine.** A field named in `fields` is subtracted outright, so a constraint over that same field is never reached. Write "this value is forbidden" with `values` alone; add `fields` only to forbid the key whatever it carries.
+- **Value constraints stay flat** (fields and `and` only). "This value is forbidden" is a `deny` rule, not an `or`/`not` expression buried in a constraint — see [condition shorthand](./condition-shorthand.md). Flat still means one shape per node: a constraint naming a field *and* an `and` beside it is refused by [`parseRules`](./parse.md), because the reader takes the group and would drop the field. In TypeScript the other shapes never reach that check — `values` is typed as a field condition, so `or`, `not` and `relation` are compile errors; the refusal at runtime is there for JavaScript and for a rule that arrived past the types.
 - **A constraint on a field that isn't in the data is never evaluated**, which is what makes PATCH semantics work.
 
 ## Source

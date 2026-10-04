@@ -1,10 +1,8 @@
 # ⚡ @vetojs/core
 
-> Авторизация для TypeScript: кто из пользователей что может делать в вашем приложении. Правила — обычный JSON, типы выводятся сами, 0 зависимостей.
+> Право пишется один раз: те же правила отвечают на `can()`, становятся `WHERE` запроса, проверяют запись по полям и охраняют server action, HTTP-обработчик и вызов инструмента ИИ-агентом.
 
 [![NPM version](https://img.shields.io/npm/v/%40vetojs%2Fcore)](https://www.npmjs.com/package/@vetojs/core)
-[![Bundle size](https://img.shields.io/bundlejs/size/%40vetojs%2Fcore)](https://bundlejs.com/?q=%40vetojs%2Fcore)
-[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/@vetojs/core?activeTab=dependencies)
 [![License](https://img.shields.io/npm/l/%40vetojs%2Fcore)](https://github.com/ivan-yuldashev/vetojs/blob/main/LICENSE)
 [![Socket](https://socket.dev/api/badge/npm/package/@vetojs/core)](https://socket.dev/npm/package/@vetojs/core)
 
@@ -12,15 +10,15 @@
 
 Авторизация отвечает на вопрос «можно ли *этому* пользователю сделать *это* с *этой* строкой». Здесь ответ даёт политика — чистая функция, которая принимает пользователя (или другой контекст) и возвращает массив правил в обычном JSON.
 
-Один и тот же массив закрывает три места сразу: проверку в коде (`ability.can("update", "post", post)`), условие `WHERE` для выборки из базы и список полей, которые пользователю позволено записать.
+Один и тот же массив закрывает все места, где возникает этот вопрос: проверку в коде (`ability.can("update", "post", post)`), условие `WHERE` для выборки из базы, список полей, которые пользователю позволено записать, и вызов инструмента, который агент делает от имени пользователя.
 
 ## Почему @vetojs/core
 
-- **Типы выводятся сами.** Одно объявление `defineAbilities` — дальше действия, ресурсы, поля и операторы подставляет редактор. Ручных дженериков нет, `any` нет.
-- **Ноль оверхеда.** 0 зависимостей, только ESM, `sideEffects: false`. Собрать ability и проверить строку — 4.0 kB gzip; вместе с валидацией пришедших правил — 5.4 kB.
-- **Работает везде, где есть JavaScript.** Node, браузер, Cloudflare Workers, Vercel Edge, Deno, Bun — один и тот же бандл, без платформенных веток.
-- **Никакого скрытого состояния.** Кроме двух классов ошибок, классов в пакете нет. `buildAbility` ничего не мутирует и ничего не кеширует между запросами.
-- **Ассистент разберётся сам.** Весь API собран на одной странице — [docs/for-agents.ru.md](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/for-agents.ru.md) и [llms.txt](https://github.com/ivan-yuldashev/vetojs/blob/main/llms.txt): дайте ссылку Claude, Cursor или Copilot, и подсказки будут по делу.
+- **Одна политика на все входные точки.** `can()` в коде, `where()` для запроса, `validatePayload` для записи, `createGuard` вокруг server action, HTTP-обработчика или вызова инструмента агентом — все читают один и тот же массив.
+- **Запрос возвращает то, что разрешает проверка.** `ability.where()` отдаёт дерево условий, из которого компилируется `WHERE`, а тест требует, чтобы оно выбирало те же строки, что и `can()`, — в том числе на грязных данных.
+- **Отказ называет поле.** `violations: [{ field, reason }]` — клиенту API есть чем ответить, а модели — что исправить в аргументе, вместо того чтобы повторять вызов.
+- **Агенту доступно только то, что доступно его человеку.** Гвард загружает строку, которую назвала модель, и сверяет её с политикой человека, за которого действует агент, — до того, как запустится ваш обработчик.
+- **Кривые данные сужают доступ, но не расширяют.** Поле не того типа или пропавший ключ дают вердикт «неизвестно»: `allow` при нём ничего не разрешает, `deny` всё равно срабатывает.
 
 ---
 
@@ -75,10 +73,10 @@ type PostActions = ActionFor<typeof ac, "post">;
 //   ^? "read" | "update" | "publish" | "manage"
 
 ability.can("publish", "post", post);
-//           ^| автодополнение подставит эти четыре и никаких других
+//           ^| автодополнение подставит эти три и никаких других
 ```
 
-`manage` добавляется к каждому ресурсу — это подстановочное действие, покрывающее все остальные.
+`manage` добавляется к каждому ресурсу для правил — это подстановочное действие, покрывающее все остальные. Вопрос называет действие, о котором спрашивает, поэтому `can` предлагает только объявленные, без `manage`.
 
 Возвращаемые типы выводятся оттуда же:
 
@@ -86,7 +84,7 @@ ability.can("publish", "post", post);
 const filter = ability.where("read", "post");
 //    ^? ConditionNode<{ id: string; authorId: string; status: "draft" | "published" }>
 
-const writable = ability.permittedFields("update", "post", ["status"]);
+const writable = ability.permittedFields("update", "post", post, ["status"]);
 //    ^? "status"[]
 
 const forClient = ability.rules;
@@ -105,21 +103,6 @@ allow("read", "post", { where: { statuz: "published" } });
 allow("read", "post", { where: { status: "archived" } });
 //                                       ^^^^^^^^^^ ✗ Type '"archived"' is not assignable to type '"draft" | "published" | ScalarOperators<…>'
 ```
-
-## Чем отличается от CASL
-
-CASL — самая распространённая библиотека авторизации в экосистеме, поэтому сравнение с ней:
-
-| Задача | CASL | @vetojs/core |
-|---|---|---|
-| Зависимости | 1 прямая, 4 в дереве | **0** |
-| Собрать ability и проверить строку | 6.3 kB gzip | **4.0 kB gzip** |
-| Отдать права на клиент | пересобрать: `createMongoAbility(rules)` | тот же массив: `buildAbility(ac, rules)` |
-| Объявить действия и ресурсы | перечислить парами в дженерике | выводятся из `defineAbilities` |
-| Отфильтровать выборку в базе | адаптер под ORM, для SQL его нет | `ability.where()` отдаёт дерево условий, из него собирается `WHERE` |
-| RSC и edge-рантаймы | — | поддерживаются |
-
-Цифры собраны [тестом](https://github.com/ivan-yuldashev/vetojs/blob/main/packages/core/tests/readme-size.test.ts): обе библиотеки проходят esbuild, минификацию и gzip; сверка проведена на `@casl/ability@7.0.1`. [Переход с CASL](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/migrate-from-casl.ru.md) сопоставляет API построчно.
 
 ## Core API
 
@@ -167,12 +150,10 @@ if (!result.ok) {
 
 ```ts
 import { createGuard } from "@vetojs/core/guard";
+import { ac, policyFor } from "./abilities";
+import { getActor } from "./auth";
 
-export const withPermission = createGuard({
-	ac: accessControl,
-	getActor: currentActor,
-	policy: policyFor,
-});
+export const withPermission = createGuard({ ac, getActor, policy: policyFor });
 ```
 
 Дальше каждое действие называет только две вещи: что оно делает и с каким ресурсом. Обёртка находит пользователя, загружает строку, проверяет payload и лишь потом пускает в обработчик — одинаково для server action, [HTTP-обработчика](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/http.ru.md) и [вызова инструмента агентом](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.ru.md).
@@ -211,6 +192,28 @@ ability.can("update", "post", post);
 
 Если строку вы собрали не запросом, а руками — склеили из двух ответов, достали из кеша, — движку об этом надо сказать: `markLoaded(post, "author", author)` вернёт копию с пометкой «автор загружен». Без неё связь считается незагруженной, и `can()` бросит исключение ([подробнее о связях](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.ru.md)).
 
+## Как это устроено
+
+- **Типы выводятся сами.** Одно объявление `defineAbilities` — дальше действия, ресурсы, поля и операторы подставляет редактор. Ручных дженериков нет, `any` нет.
+- **Мало весит и ничего не тянет.** Собрать ability и проверить строку — 3.9 kB gzip; вместе с валидацией пришедших правил — 5.5 kB. 0 зависимостей, только ESM, `sideEffects: false`.
+- **Скрытого состояния нет.** Кроме двух классов ошибок, классов в пакете нет. `buildAbility` ничего не мутирует и ничего не кеширует между запросами.
+- **Работает везде, где есть JavaScript.** Node, браузер, Cloudflare Workers, Vercel Edge, Deno, Bun — один и тот же бандл, без платформенных веток.
+
+## Сравнение с CASL
+
+CASL — самая распространённая библиотека авторизации в экосистеме. Если вы выбираете между ними или переезжаете:
+
+| Задача | CASL | @vetojs/core |
+|---|---|---|
+| Зависимости | 1 прямая, 4 в дереве | **0** |
+| Собрать ability и проверить строку | 6.3 kB gzip | **3.9 kB gzip** |
+| Отдать права на клиент | пересобрать: `createMongoAbility(rules)` | тот же массив: `buildAbility(ac, rules)` |
+| Объявить действия и ресурсы | перечислить парами в дженерике | выводятся из `defineAbilities` |
+| Отфильтровать выборку в базе | адаптер под ORM, для SQL его нет | `ability.where()` отдаёт дерево условий, из него собирается `WHERE` |
+| RSC и edge-рантаймы | — | поддерживаются |
+
+Цифры собраны [тестом](https://github.com/ivan-yuldashev/vetojs/blob/main/packages/core/tests/readme-size.test.ts): обе библиотеки проходят esbuild, минификацию и gzip; сверка проведена на `@casl/ability@7.0.1`. [Переход с CASL](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/migrate-from-casl.ru.md) сопоставляет API построчно.
+
 ## Contributing
 
 Не хватает оператора, не ложится сценарий, мешает формулировка в ошибке — [расскажите об этом в issue](https://github.com/ivan-yuldashev/vetojs/issues/new). Пожелания к API читаются наравне с баг-репортами и влияют на то, что делается следующим.
@@ -220,6 +223,7 @@ ability.can("update", "post", post);
 ## Что дальше
 
 - **[Документация](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/README.ru.md)** — подробные страницы по каждому концепту: от объявления ресурсов до SQL-фильтрации.
+- **[Агенты](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.ru.md)** — как охранять вызовы инструментов той же политикой, пополевой отказ, по которому модель исправляется, и действия, за которыми нет строки.
 - **[Для агентов](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/for-agents.ru.md)** и **[llms.txt](https://github.com/ivan-yuldashev/vetojs/blob/main/llms.txt)** — весь API на одной странице, под контекст ИИ-ассистента: дайте ссылку Claude, Cursor или Copilot.
 - **Примеры** — три рабочих демо на одной мультитенантной модели: [react-spa](https://github.com/ivan-yuldashev/vetojs/tree/main/examples/react-spa), [next-app](https://github.com/ivan-yuldashev/vetojs/tree/main/examples/next-app) и [drizzle-pg](https://github.com/ivan-yuldashev/vetojs/tree/main/examples/drizzle-pg), где `can()` и скомпилированный `WHERE` сверяются построчно.
 

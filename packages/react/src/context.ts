@@ -1,7 +1,7 @@
 "use client";
 
 import type {
-	AbilitySet,
+	Ability,
 	CheckedRule,
 	ResourceMap,
 	ResourceName,
@@ -22,7 +22,7 @@ import { type AbilityStore, createAbilityStore } from "./store.js";
 import type {
 	AbilityProviderProps,
 	CanProps,
-	UseCan,
+	EnvBinding,
 	VetoContext,
 } from "./types.js";
 
@@ -48,35 +48,61 @@ const useIsomorphicLayoutEffect =
  * is that `<Can>` autocompletes actions per resource and rejects ones that do not exist.
  * Call it once in a module and import the bindings from there.
  *
+ * When the declarations name an `env`, pass `withEnv` as well: the provider then binds the
+ * rules to the `env` it is given. It is an argument rather than an import here so that an
+ * app without an environment does not carry the code that binds one.
+ *
  * @example
  * // src/veto.ts
  * export const { AbilityProvider, useAbility, useCan, Can } = createVetoContext(ac);
  */
 export const createVetoContext = <AC extends ResourceMap>(
 	ac: AC,
+	...binding: EnvBinding<AC>
 ): VetoContext<AC> => {
+	const [bind] = binding as [
+		((ability: never, env: never) => Ability<AC>) | undefined,
+	];
 	const Context = createContext<AbilityStore<AC> | null>(null);
+
+	const bound = (base: Ability<AC>, env: unknown): Ability<AC> => {
+		return bind === undefined || env === undefined
+			? base
+			: bind(base as never, env as never);
+	};
 
 	const AbilityProvider = (props: AbilityProviderProps<AC>) => {
 		const { ability: prebuilt, rules } = props;
+		const env = Object.hasOwn(props, "env") ? props.env : undefined;
 
-		const ability = useMemo(
+		const base = useMemo(
 			() => prebuilt ?? buildAbility(ac, rules ?? []),
 			[prebuilt, rules],
 		);
 
-		const [store] = useState(() => createAbilityStore(ability));
+		const [store] = useState(() => {
+			const created = createAbilityStore(bound(base, env));
+
+			created.env = env;
+
+			return created;
+		});
 
 		useIsomorphicLayoutEffect(() => {
-			store.publish(ability);
-		}, [store, ability]);
+			store.publish(bound(base, store.env));
+		}, [store, base]);
+
+		useIsomorphicLayoutEffect(() => {
+			store.env = env;
+			store.publish(bound(store.get(), env));
+		}, [store, env]);
 
 		return createElement(Context.Provider, { value: store }, props.children);
 	};
 
 	const useVerdict = (
-		given: AbilitySet<AC> | undefined,
-		read: (ability: AbilitySet<AC>) => boolean,
+		given: Ability<AC> | undefined,
+		read: (ability: Ability<AC>) => boolean,
 	): boolean => {
 		const store = useContext(Context);
 
@@ -107,7 +133,7 @@ export const createVetoContext = <AC extends ResourceMap>(
 		return store;
 	};
 
-	const useAbility = (): AbilitySet<AC> => {
+	const useAbility = (): Ability<AC> => {
 		const store = useStore();
 		return useSyncExternalStore(store.subscribe, store.get, store.get);
 	};
@@ -116,26 +142,27 @@ export const createVetoContext = <AC extends ResourceMap>(
 		const store = useStore();
 
 		return useCallback(
-			(rules: readonly CheckedRule[]) => store.publish(buildAbility(ac, rules)),
+			(rules: readonly CheckedRule[]) =>
+				store.publish(bound(buildAbility(ac, rules), store.env)),
 			[store],
 		);
 	};
 
-	const useCan: UseCan<AC> = (action, resource, instance?) => {
+	const useCan: VetoContext<AC>["useCan"] = (action, resource, row?) => {
 		return useVerdict(undefined, (ability) =>
-			ability.can(action, resource, instance),
+			ability.can(action, resource, row),
 		);
 	};
 
 	const Can = <R extends ResourceName<AC>>({
 		I,
 		a,
-		this: instance,
+		this: row,
 		ability: given,
 		children,
 		fallback = null,
 	}: CanProps<AC, R>) => {
-		return useVerdict(given, (ability) => ability.can(I, a, instance))
+		return useVerdict(given, (ability) => ability.can(I, a, row))
 			? children
 			: fallback;
 	};

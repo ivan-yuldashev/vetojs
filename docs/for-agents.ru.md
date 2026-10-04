@@ -37,7 +37,7 @@ const { allow, deny } = createRules(ac);
 const policyFor = (user: { id: string }) => [
 	allow("read", "post", { where: { status: "published" } }),
 	allow(["update", "publish"], "post", { where: { authorId: user.id } }),
-	deny("update", "post", { payload: { fields: ["featured"] } }),
+	deny("update", { post: ["featured"] }),
 ];
 
 // 3. Соберите на запрос — и проверяйте доступ.
@@ -54,16 +54,15 @@ ability.can("update", "post", post);
 |---|---|---|
 | `defineAbilities` | `({ resources }) => AC` | объявляет ресурсы, действия и связи. `schema` необязательна: у ресурса без строк — экрана, отчёта — её не пишут, форма получается пустой, и ни строка, ни сравнение по полю не проходят по типам |
 | `shape<T>()` | `() => Schema<T>` | несёт форму строки и в рантайме не проверяет ничего. Передайте вместо неё схему Zod / Valibot / ArkType — и `ability.validate` начнёт проверять данные, а форма выведется из схемы. **Не Yup**: его реализация Standard Schema асинхронная, а асинхронная схема бросает исключение |
-| `createRules` | `(ac, { maxDepth? }?) => { allow, deny }` | типизированные фабрики правил |
-| `buildAbility` | `(ac, rules) => AbilitySet` | превращает политику в объект, который вы вызываете |
+| `createRules` | `(ac) => { allow, deny }` | типизированные фабрики правил |
+| `buildAbility` | `(ac, rules) => Ability` | превращает политику в объект, который вы вызываете |
 | `parseRules` | `(json, vocabulary) => RuleParseResult` | проверяет недоверенный JSON с правилами |
-| `toVocabulary` | `(ac) => Vocabulary` | сериализуемые имена, если словарь хранится отдельно |
+
 | `markLoaded` | `(row, relation, value) => row` | сообщает, что связь загружена |
-| `"manage"` | имя действия | wildcard: `allow("manage", "post")` даёт все действия, объявленные у `post`, **включая те, что появятся позже**. Когда нужен снимок, перечислите явно — `allow([...ac.post.actions], "post")` |
+| `"manage"` | имя действия | wildcard: `allow("manage", "post")` даёт все действия, объявленные у `post`, **включая те, что появятся позже**. Когда нужен снимок, перечислите явно — `allow([...ac.post.actions], "post")`. Только в правилах: вопрос называет объявленное действие, и `can("manage", …)` не компилируется |
 | `ConditionOperator` | объект-константа | `eq ne in nin gt gte lt lte contains exists has hasAny hasAll` |
 | `ForbiddenError` | класс | `.action`, `.resource`, `.violations?`; опознавать через `ForbiddenError.is(error)`, а не `instanceof` |
 | `RelationNotLoadedError` | класс | `.relation` |
-| `type<T>()` | `() => Schema<T>` | **устарело**, прежнее имя `shape`, та же функция. Написанный код продолжает работать; в новом пишите `shape` |
 
 Методы `ability`:
 
@@ -71,10 +70,10 @@ ability.can("update", "post", post);
 |---|---|---|
 | `can(action, resource, row?)` | `boolean` | ветвление. **Без строки ответ оптимистичный** — истина, когда есть покрывающий `allow` и нет глухого `deny`, — и это ровно то, что нужно решению о рендере, пока строки ещё нет |
 | `cannot(action, resource, row?)` | `boolean` | ранний выход |
-| `authorize(action, resource, row?)` | `void`, бросает `ForbiddenError` | границы на сервере |
+| `authorize(action, resource, row?)` | `void`, бросает `ForbiddenError` | границы на сервере. **Без строки не гадает** — пропускает, только когда действие покрыто `allow` без `where` и ни один `deny` строку не читает |
 | `canMutate(action, resource, row)` | `boolean` | можно ли писать в эту строку |
 | `validatePayload(action, resource, row, data)` | `{ ok: true, data } \| { ok: false, violations }` | можно ли записать эти данные |
-| `permittedFields(action, resource, fields)` | подмножество `fields` | для формы |
+| `permittedFields(action, resource, row, fields)` | подмножество `fields` | для формы |
 | `where(action, resource)` | `ConditionNode` | фильтр для базы |
 | `validate(resource, data)` | `{ ok: true, value } \| { ok: false, issues }` | проверка по схеме; каждая проблема — `{ message, path? }`, где `path` — поле, на которое указала схема |
 | `rules` | `CheckedRules` | отправить клиенту |
@@ -98,6 +97,7 @@ const ability = await getAbility();
 ```ts
 // src/veto.ts — вызовите фабрику один раз, импортируйте привязки отсюда
 import { createVetoContext } from "@vetojs/react";
+import { ac } from "./abilities";
 export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
 	createVetoContext(ac);
 ```
@@ -122,7 +122,7 @@ export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
 
 `createGuard({ ac, getActor, policy })` возвращает `withPermission(options, handler)`. Фреймворков он не знает — та же обёртка охраняет server action, HTTP-обработчик и вызов инструмента агентом. Опишите `load` для строки и `payload` для записываемых данных; обработчик выполнится, только если пройдут обе проверки. В `ctx.payload` окажется проверенная копия, а `ctx.row` при объявленном `load` — строка, а не «может быть строка». См. [руководство](./guard.ru.md).
 
-Ресурс — существительное словаря, а не таблица, поэтому эффект, которому нечего загружать — письмо, запись файла, вебхук, списание с карты, — охраняется так же: `load` собирает строку из аргументов, выводя поля, по которым судит политика (`recipientDomain`, а не сырой адрес). Пропустить `load` здесь — ошибка: ответ без строки оптимистичен, а условный `deny` откажет всем вызовам. См. [охрану действий агента](./agents.ru.md).
+Ресурс — существительное словаря, а не таблица, поэтому эффект, которому нечего загружать — письмо, запись файла, вебхук, списание с карты, — охраняется так же: `load` собирает строку из аргументов, выводя поля, по которым судит политика (`recipientDomain`, а не сырой адрес). Пропустить `load` здесь — ошибка: без строки `allow` с `where` ничего не даёт, а условный `deny` откажет всем вызовам. См. [охрану действий агента](./agents.ru.md).
 
 ## Как писать условия
 
@@ -186,16 +186,16 @@ db.select().from(posts).where(schema.filter(ability, "read", "post", eq(posts.id
 ## Правила извне
 
 ```ts
-const result = parseRules(JSON.parse(raw), ac);
+const result = parseRules(JSON.parse(raw));
 if (!result.ok) throw new Error(result.errors.join("\n"));
 const ability = buildAbility(ac, result.rules);
 ```
 
-`buildAbility` ждёт проверенные правила — от `createRules` либо от `parseRules` **со словарём**. Система типов следит за этим везде, где у значения ещё есть тип (см. оговорку про `any` ниже).
+`buildAbility` ждёт проверенные правила — от `createRules` либо от `parseRules`. Система типов следит за этим везде, где у значения ещё есть тип (см. оговорку про `any` ниже).
 
 ## Как выдавать правила в JSON
 
-Когда вы не вызываете политику, а составляете её — заполняете админку, пишете в базу, — выдавайте хранимую форму и отдавайте её на проверку шлюзу. Контракт, по которому писать, — `toVocabulary(ac)`: одни имена, без схем, несколько сотен байт на обычный домен.
+Когда вы не вызываете политику, а составляете её — заполняете админку, пишете в базу, — выдавайте хранимую форму и отдавайте её на проверку шлюзу. Дверь проверяет форму; имена — на вас, поэтому порождайте их из тех же объявлений, которые читает принимающая сборка.
 
 ```ts
 const proposed = [
@@ -204,24 +204,17 @@ const proposed = [
 		action: ["update", "publish"],
 		resource: "post",
 		where: { field: "authorId", op: "eq", value: "u1" },
-		payload: {
-			fields: ["status"],
-			constraints: { field: "status", op: "in", value: ["draft"] },
-		},
+		fields: ["status"],
+		values: { field: "status", op: "in", value: ["draft"] },
 	},
 ];
 
-const result = parseRules(proposed, toVocabulary(ac));
+const result = parseRules(proposed);
 ```
 
-Отказать могут двумя способами, и реагировать на них надо по-разному:
+Отказ здесь один: `ok: false` значит, что неверна форма, и у каждой ошибки есть путь, вида `rules[0].where.op: unknown operator "regex"`. Исправить и повторить.
 
-| Результат | Что значит | Что делать |
-|---|---|---|
-| `ok: false` | форма неверна | исправить и повторить — у каждой ошибки есть путь, вида `rules[0].where.op: unknown operator "regex"` |
-| `ok: true` и непустой `unknown` | имя, которого в этой установке не знают | `allow` **отправлен в карантин** и не даёт ничего; `deny` **оставлен**, потому что запрет обязан продолжать защищать |
-
-Если читать только `result.rules`, второй случай не виден: придуманное действие или ресурс превращают `allow` в ничто молча. Смотрите `unknown` и сообщайте о нём.
+Имена дверь не проверяет. Придуманное действие или ресурс её пройдут и дальше ни с чем не совпадут — `allow` не даст ничего, `deny` ничего не защитит, — а придуманная связь бросит на первой же проверке, которая до неё дойдёт. Порождайте имена из объявлений, а не по памяти.
 
 **У узла ровно одна форма.** Узел условия называет что-то одно: `and`, `or`, `not`, `relation` или поле. Поле и `and` в одном объекте будут отклонены — их никто не объединяет, читатель взял бы одно и потерял другое.
 
@@ -248,7 +241,7 @@ buildAbility(ac, parseRules(JSON.parse(raw), ac).rules); // ✓
 
 Обратите внимание на комментарий: этот вызов **скомпилируется**, потому что `JSON.parse` возвращает `any`. Типы отклонят литерал или обычный `Rule[]`, но значение, потерявшее свой тип, поймать нечем. Полагаться здесь на компилятор нельзя.
 
-**Использовать проверку без строки как защиту строки.** `can("update", "post")` и `authorize("update", "post")` отвечают на вопрос *возможно ли это хоть для какой-то строки*. Это для решений об отрисовке, а не для защиты операции над конкретной строкой. Если строка есть — передайте её.
+**Использовать проверку без строки как защиту строки.** `can("update", "post")` отвечает на вопрос *возможно ли это хоть для какой-то строки*. Это для решений об отрисовке, а не для защиты операции над конкретной строкой. `authorize("update", "post")` вместо догадки отказывает, поэтому та же ошибка с ним обернётся 403 для того, кому можно менять только свои посты. Если строка есть — передайте её.
 
 **Забыть загрузить связь, которая нужна правилу.** Если правило читает `post.author.role`, автор должен лежать на объекте, иначе `can()` бросит `RelationNotLoadedError`. Загружайте в запросе:
 

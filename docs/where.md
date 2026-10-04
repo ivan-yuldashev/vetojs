@@ -54,9 +54,9 @@ This is exactly how SQL already behaves — `WHERE` drops rows where the predica
 
 ## Why it works this way
 
-- **`where()` needs no instance** — it *is* the query condition. The row-level answer is `can()`; these are the two honest modes, and they agree by construction.
+- **`where()` needs no row** — it *is* the query condition. The row-level answer is `can()`; these are the two honest modes, and they agree by construction.
 - **True and false reuse the existing empty combinators**, so every consumer already handles them without a new node type.
 
 ## Source
 
-[`api/where.ts`](../packages/core/src/api/where.ts) · [tests](../packages/core/tests/api/where.test.ts) · [conformance](../packages/core/tests/conformance.test.ts)
+[`compile/where.ts`](../packages/core/src/compile/where.ts) · [tests](../packages/core/tests/api/where.test.ts) · [conformance](../packages/core/tests/conformance.test.ts)

@@ -1,9 +1,8 @@
 # ⚡ @vetojs/react
 
-> Авторизация в React: одни и те же правила решают, что можно на сервере и что показывать в интерфейсе.
+> Интерфейс показывает ровно то, что разрешит сервер: `<Can>` и хуки читают те же правила, по которым проверяются ваши обработчики, запросы и агенты.
 
 [![NPM version](https://img.shields.io/npm/v/%40vetojs%2Freact)](https://www.npmjs.com/package/@vetojs/react)
-[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/@vetojs/react?activeTab=dependencies)
 [![React](https://img.shields.io/badge/react-%E2%89%A518-61dafb)](https://react.dev)
 [![License](https://img.shields.io/npm/l/%40vetojs%2Freact)](https://github.com/ivan-yuldashev/vetojs/blob/main/LICENSE)
 [![Socket](https://socket.dev/api/badge/npm/package/@vetojs/react)](https://socket.dev/npm/package/@vetojs/react)
@@ -16,10 +15,10 @@
 
 ## Почему @vetojs/react
 
-- **Типы выводятся сами.** `createVetoContext(ac)` запоминает вашу схему: `<Can>` подсказывает действия, доступные именно этому ресурсу, и не пропускает несуществующие.
-- **RSC без клиентской границы.** `@vetojs/react/server` закрывает серверный компонент за **98 байт** — ни директив, ни хуков, ни контекста в браузере.
-- **Точечные ререндеры.** `useCan` подписывается на один вердикт и будит только ту строку, чей ответ изменился.
-- **0 зависимостей.** `react` и `@vetojs/core` — peer-зависимости, ничего своего пакет в дерево не добавляет.
+- **Одна копия логики доступа.** Кнопки, вкладки и списки спрашивают тот же массив, который уже применяет сервер, поэтому интерфейсу не от чего отстать.
+- **Серверный компонент решает на сервере.** `<Can>` из `@vetojs/react/server` выбирает разметку во время рендера, и в браузер попадает только выбранная ветка — ни директив, ни хуков, ни контекста.
+- **Перерисовывается строка, а не список.** `useCan` подписывается на один вердикт и будит только ту строку, чей ответ изменился.
+- **Смена пользователя без ререндера всего дерева.** `useSetRules` пишет новые правила прямо в хранилище, и обновляются только те вердикты, что изменились.
 
 ---
 
@@ -109,7 +108,7 @@ const canEdit = useCan("update", "post", post);
 </Can>;
 
 <AbilityProvider rules={rules} ability={ability}>
-//                             ^^^^^^^ ✗ Type 'AbilitySet<…>' is not assignable to type 'undefined'
+//                             ^^^^^^^ ✗ Type 'Ability<…>' is not assignable to type 'undefined'
 	<EditButton />
 </AbilityProvider>;
 ```
@@ -149,7 +148,7 @@ const ability = await getAbility();
 
 ```tsx
 const visible = postList.filter((item) => ability.can("read", "post", item));
-const writable = ability.permittedFields("update", "post", ["title", "status"]);
+const writable = ability.permittedFields("update", "post", post, ["title", "status"]);
 ```
 
 ## Смена пользователя без лишних рендеров
@@ -169,6 +168,12 @@ const onSwitchActor = async (id: string) => {
 ## Спрятать кнопку — не значит защитить данные
 
 Скрытый элемент интерфейса — это вежливость к пользователю, а не защита: запрос, который эта кнопка отправляла бы, можно отправить и руками. Каждое действие по-прежнему проверяется на сервере — [гвардом](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/guard.ru.md) или `ability.authorize()`. Ценность пакета в другом: сервер и интерфейс читают один массив правил, поэтому UI не может разойтись с реальными разрешениями.
+
+## Как это устроено
+
+- **Типы выводятся сами.** `createVetoContext(ac)` запоминает вашу схему: `<Can>` подсказывает действия, доступные именно этому ресурсу, и не пропускает несуществующие.
+- **98 байт на сервере.** Столько стоит `<Can>` из `@vetojs/react/server`, чтобы закрыть серверный компонент.
+- **0 зависимостей.** `react` и `@vetojs/core` — peer-зависимости, ничего своего пакет в дерево не добавляет.
 
 ## Roadmap
 

@@ -1,15 +1,15 @@
+import type { Ability, Decision } from "../api/index.js";
 import type {
-	AbilitySet,
-	ActionFor,
-	CheckedRules,
-	DecisionReport,
+	DeclaredAction,
+	EnvOf,
 	ResourceMap,
 	ResourceName,
 	ShapeOf,
-} from "../api/index.js";
+} from "../create/index.js";
 import type { ForbiddenError } from "../errors/index.js";
+import type { CheckedRules } from "../model/index.js";
 
-export type Awaitable<T> = T | Promise<T>;
+type Awaitable<T> = T | Promise<T>;
 
 export type GuardOptions = {
 	action: string;
@@ -18,10 +18,28 @@ export type GuardOptions = {
 	payload?: (...args: unknown[]) => Record<string, unknown>;
 };
 
+type EnvArgument<AC extends ResourceMap> = [EnvOf<AC>] extends [never]
+	? []
+	: [env: EnvOf<AC>];
+
+type EnvSource<AC extends ResourceMap> = [EnvOf<AC>] extends [never]
+	? { getEnv?: never }
+	: {
+			/**
+			 * How to read the environment one call runs in — the hour, the IP, whether the
+			 * session passed MFA. Required when the declarations name an `env`.
+			 *
+			 * Receives the wrapped function's own arguments, so a route handler can read its
+			 * `Request`, and runs alongside {@link GuardConfig.getActor}. Every check of the call,
+			 * and `ctx.ability` in the handler, read the environment it returns.
+			 */
+			getEnv: (...args: unknown[]) => Awaitable<EnvOf<AC>>;
+		};
+
 /**
  * Configured once per app; each action then only says what it acts on.
  */
-export type GuardConfig<AC extends ResourceMap, Actor> = {
+export type GuardConfig<AC extends ResourceMap, Actor> = EnvSource<AC> & {
 	/** Your {@link defineAbilities} declarations. */
 	ac: AC;
 
@@ -61,12 +79,30 @@ export type GuardConfig<AC extends ResourceMap, Actor> = {
 
 	/**
 	 * Called after every access decision the guarded action makes, with what was asked,
-	 * what was answered and the rule that settled it — see {@link DecisionReport}.
+	 * what was answered and the rule that settled it — see {@link Decision}.
 	 *
 	 * The actor comes second because this hook is configured once while the actor is
-	 * resolved per call, so a closure could not have it.
+	 * resolved per call, so a closure could not have it. With an `env` declared, the
+	 * environment comes third, for the same reason: an `allow` its `when` ruled out is
+	 * otherwise indistinguishable in a log from one that was never written.
+	 *
+	 * A hook that throws refuses the guarded action: the exception reaches your caller
+	 * instead of the handler, and it is not a {@link ForbiddenError}, so `onDeny` does
+	 * not run. Catch inside the hook when telemetry must not block an action.
 	 */
-	onDecision?: (decision: DecisionReport, actor: Actor) => void;
+	onDecision?: (
+		decision: Decision,
+		actor: Actor,
+		...env: EnvArgument<AC>
+	) => void;
+};
+
+export type AnyGuardConfig<Actor> = Pick<
+	GuardConfig<ResourceMap, Actor>,
+	"ac" | "getActor" | "policy" | "onUnauthenticated" | "onDeny"
+> & {
+	getEnv?: (...args: unknown[]) => unknown;
+	onDecision?(decision: Decision, actor: Actor, ...env: unknown[]): void;
 };
 
 /**
@@ -81,7 +117,7 @@ export type ActionOptions<
 	R extends ResourceName<AC>,
 	Args extends unknown[],
 > = {
-	action: ActionFor<AC, R>;
+	action: DeclaredAction<AC, R>;
 	resource: R;
 
 	/**
@@ -111,7 +147,7 @@ export type GuardContext<
 	O = ActionOptions<AC, R, never[]>,
 > = {
 	actor: Actor;
-	ability: AbilitySet<AC>;
+	ability: Ability<AC>;
 	row: O extends { load: Provided }
 		? ShapeOf<AC, R>
 		: ShapeOf<AC, R> | undefined;

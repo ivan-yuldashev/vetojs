@@ -1,11 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { buildAbility } from "../../src/api/ability.js";
-import type { CheckedRules } from "../../src/api/checked-rules.types.js";
-import { createRules } from "../../src/api/create-rules.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { parseRules } from "../../src/api/parse.js";
-import { shape } from "../../src/api/schema.js";
-import { toVocabulary } from "../../src/api/vocabulary.js";
+import { assert, describe, expect, it } from "vitest";
+import { buildAbility } from "../../src/api/index.js";
+import { createRules, defineAbilities, shape } from "../../src/create/index.js";
+import type { CheckedRules } from "../../src/model/index.js";
+import { parseRules } from "../../src/validate/index.js";
 
 type Post = { id: string; authorId: string };
 
@@ -38,78 +35,37 @@ const asRule = (resource: string): CheckedRules =>
 	[{ effect: "allow", action: "read", resource }] as CheckedRules;
 
 describe("a name that every object inherits is not a declaration", () => {
-	describe("the trust gate answers instead of crashing", () => {
-		it("quarantines a rule naming an inherited member as its resource", () => {
+	describe("the gate reads such a name as a name, nothing more", () => {
+		it("accepts a rule naming an inherited member as its resource", () => {
 			for (const resource of INHERITED) {
-				const result = parseRules(asRule(resource), toVocabulary(ac));
+				const result = parseRules(asRule(resource));
 
 				expect(result.ok).toBe(true);
-
-				if (!result.ok) {
-					continue;
-				}
-
-				expect(result.unknown).toHaveLength(1);
-				expect(result.rules).toHaveLength(0);
+				expect(result.ok && result.rules).toHaveLength(1);
 			}
 		});
 
-		it("quarantines a rule reaching for an inherited relation", () => {
+		it("accepts a rule reaching for a relation of that name", () => {
 			for (const relation of INHERITED) {
-				const result = parseRules(
-					[
-						{
-							effect: "allow",
-							action: "read",
-							resource: "post",
-							where: {
-								relation,
-								type: "one",
-								where: { field: "id", op: "eq", value: "u1" },
-							},
+				const result = parseRules([
+					{
+						effect: "allow",
+						action: "read",
+						resource: "post",
+						where: {
+							relation,
+							type: "one",
+							where: { field: "id", op: "eq", value: "u1" },
 						},
-					] as CheckedRules,
-					toVocabulary(ac),
-				);
+					},
+				]);
 
 				expect(result.ok).toBe(true);
-
-				if (!result.ok) {
-					continue;
-				}
-
-				expect(result.unknown).toHaveLength(1);
 			}
-		});
-
-		it("keeps a deny it cannot place, exactly as for any unknown resource", () => {
-			const inherited = parseRules(
-				[
-					{ effect: "deny", action: "read", resource: "toString" },
-				] as CheckedRules,
-				toVocabulary(ac),
-			);
-
-			const ghost = parseRules(
-				[{ effect: "deny", action: "read", resource: "ghost" }] as CheckedRules,
-				toVocabulary(ac),
-			);
-
-			expect(inherited.ok).toBe(true);
-			expect(ghost.ok).toBe(true);
-
-			if (!inherited.ok || !ghost.ok) {
-				return;
-			}
-
-			expect(inherited.rules).toHaveLength(1);
-			expect(inherited.unknown).toHaveLength(1);
-			expect(inherited.rules.length).toBe(ghost.rules.length);
-			expect(inherited.unknown.length).toBe(ghost.unknown.length);
 		});
 
 		it("still accepts the resources that were declared", () => {
-			const result = parseRules(asRule("post"), toVocabulary(ac));
+			const result = parseRules(asRule("post"));
 
 			expect(result.ok && result.rules).toHaveLength(1);
 		});
@@ -122,11 +78,7 @@ describe("a name that every object inherits is not a declaration", () => {
 			for (const resource of INHERITED) {
 				const answer = ability.validate(resource as "post", { anything: true });
 
-				expect(answer.ok).toBe(false);
-
-				if (answer.ok) {
-					continue;
-				}
+				assert(!answer.ok);
 
 				expect(answer.issues[0]?.message).toContain(resource);
 			}
@@ -145,7 +97,9 @@ describe("a name that every object inherits is not a declaration", () => {
 				expect(ability.can("read", resource as "post", post)).toBe(false);
 				expect(ability.can("read", resource as "post")).toBe(false);
 				expect(
-					ability.permittedFields("read", resource as "post", ["id"]),
+					ability.permittedFields("read", resource as "post", undefined, [
+						"id",
+					]),
 				).toEqual([]);
 			}
 		});
@@ -193,12 +147,9 @@ describe("a name that every object inherits is not a declaration", () => {
 		const rules = createRules(hostile);
 
 		it("parses, checks and validates like any other name", () => {
-			const result = parseRules(
-				[
-					{ effect: "allow", action: "read", resource: "constructor" },
-				] as CheckedRules,
-				toVocabulary(hostile),
-			);
+			const result = parseRules([
+				{ effect: "allow", action: "read", resource: "constructor" },
+			]);
 
 			expect(result.ok && result.rules).toHaveLength(1);
 

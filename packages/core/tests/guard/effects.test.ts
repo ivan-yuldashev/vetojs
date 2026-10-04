@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { buildAbility } from "../../src/api/ability.js";
-import { createRules } from "../../src/api/create-rules.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { shape } from "../../src/api/schema.js";
+import { buildAbility } from "../../src/api/index.js";
+import { createRules, defineAbilities, shape } from "../../src/create/index.js";
 import { ForbiddenError } from "../../src/errors/index.js";
 import { createGuard } from "../../src/guard/index.js";
 
@@ -39,13 +37,14 @@ const policyFor = (actor: Actor) => [
 		},
 	}),
 	deny("send", "email", { where: { attachments: { gt: 0 } } }),
-	allow("create", "charge", {
-		where: { workspaceId: actor.workspaceId, currency: "usd" },
-		payload: {
-			fields: ["amountCents"],
-			constraints: { amountCents: { lte: 5000 } },
+	allow(
+		"create",
+		{ charge: ["amountCents"] },
+		{
+			where: { workspaceId: actor.workspaceId, currency: "usd" },
+			values: { amountCents: { lte: 5000 } },
 		},
-	}),
+	),
 ];
 
 const agent: Actor = { id: "agent-1", workspaceId: "w1" };

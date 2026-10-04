@@ -1,13 +1,13 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { buildAbility } from "../../src/api/ability.js";
-import { createRules } from "../../src/api/create-rules.js";
-import type {
-	ActionFor,
-	ResourceName,
-	ShapeOf,
-} from "../../src/api/define-abilities.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { shape } from "../../src/api/schema.js";
+import { buildAbility } from "../../src/api/index.js";
+import {
+	type ActionFor,
+	createRules,
+	defineAbilities,
+	type ResourceName,
+	type ShapeOf,
+	shape,
+} from "../../src/create/index.js";
 
 type Post = { id: string; authorId: string };
 
@@ -84,6 +84,27 @@ describe("a resource declared without a schema", () => {
 			ok: false,
 			issues: [{ message: "expected an object" }],
 		});
+	});
+
+	it("takes no schema planted on the prototype", () => {
+		const planted = {
+			"~standard": {
+				version: 1,
+				vendor: "planted",
+				validate: () => ({ value: { role: "admin" } }),
+			},
+		};
+
+		(Object.prototype as Record<string, unknown>).schema = planted;
+
+		try {
+			expect(buildAbility(ac, []).validate("report", "nope")).toEqual({
+				ok: false,
+				issues: [{ message: "expected an object" }],
+			});
+		} finally {
+			delete (Object.prototype as Record<string, unknown>).schema;
+		}
 	});
 
 	it("is still told apart from a resource nobody declared", () => {

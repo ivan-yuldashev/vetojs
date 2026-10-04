@@ -71,7 +71,7 @@ It depends on what you declared, and the combinations are deliberate:
 | `load` + `payload` | may this actor write this row, **and** are these fields and values permitted |
 | `load` only | may this actor perform the action on this row |
 | `payload` only | is the write permitted at all — and are these fields and values allowed |
-| neither | may this actor perform the action at all |
+| neither | may this actor perform the action whatever the row — an `allow` with a `where` grants nothing here |
 
 Use `payload` for anything that writes. `ctx.payload` then holds the validated result, so a field the actor may not write cannot reach your database call even by accident.
 
@@ -136,7 +136,9 @@ const withPermission = createGuard({
 
 The actor is the second argument rather than part of the report, because this
 hook is configured once while the actor is resolved per call. What the report
-carries, and which calls do not produce one, is on [checking access](./ability.md).
+carries, which calls do not produce one, and what a hook that throws does are on
+[checking access](./ability.md) — here it costs one thing more: the exception is
+not a `ForbiddenError`, so `onDeny` does not run and the handler never does.
 
 Two refusals never reach the rules, and each is reported where it happens. When
 `load` comes back with no row the decision carries `reason: "no row"` — the id was

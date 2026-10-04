@@ -115,7 +115,8 @@ ability.validate("post", { id: 1, status: "archived" });
 type AC = typeof ac;
 
 ResourceName<AC>;      // "post" | "blog" | "comment"
-ActionFor<AC, "post">; // "read" | "create" | "update" | "delete" | "publish" | "manage"
+ActionFor<AC, "post">;      // "read" | "create" | "update" | "delete" | "publish" | "manage" — что называет правило
+DeclaredAction<AC, "post">; // "read" | "create" | "update" | "delete" | "publish" — что называет вопрос
 ShapeOf<AC, "post">;   // Post
 ```
 
@@ -125,10 +126,9 @@ ShapeOf<AC, "post">;   // Post
 
 - **Параметр типа `const` вместо `as const`.** Литеральные названия действий запоминаются сами собой, и объявление остаётся чистым.
 - **У каждого ресурса своя форма.** Общий параметр формы слепил бы разные ресурсы в один, а `ShapeOf` читает каждую `schema` по отдельности.
-- **`type` — прежнее имя `shape`.** Оно объявлено устаревшим, но по-прежнему экспортируется: это одна и та же функция, так что переименовать можно когда удобно. `type` сталкивается с одноимённым модификатором TypeScript, поэтому строка импорта, где они рядом, читается как опечатка, а сортировщики расставляют её по-разному.
 - **`schema` несёт тип, а не данные.** `shape<T>()` нужна лишь затем, чтобы протащить `T` в систему типов, и во время работы не стоит ничего. Подставьте Standard Schema, когда понадобится, чтобы `ability.validate` действительно проверял входящие данные — см. [ability](./ability.ru.md).
 - **Правило, ссылающееся на необъявленное, не пройдёт.** У типизированных фабрик это ошибка компиляции; для правил, приходящих в виде JSON, та же проверка выполняется на границе доверия — см. [parse](./parse.ru.md).
 
 ## Исходники
 
-[`api/define-abilities.ts`](../packages/core/src/api/define-abilities.ts) · [`api/schema.ts`](../packages/core/src/api/schema.ts) · [тесты](../packages/core/tests/api/define-abilities.test.ts)
+[`create/define-abilities.ts`](../packages/core/src/create/define-abilities.ts) · [`create/schema.ts`](../packages/core/src/create/schema.ts) · [тесты](../packages/core/tests/create/define-abilities.test.ts)

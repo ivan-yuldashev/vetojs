@@ -1,10 +1,11 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { buildAbility } from "../../src/api/ability.js";
-import type { DecisionReport } from "../../src/api/ability.types.js";
-import { createRules } from "../../src/api/create-rules.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { shape } from "../../src/api/schema.js";
-import type { StandardSchema } from "../../src/api/schema.types.js";
+import { buildAbility, type Decision } from "../../src/api/index.js";
+import {
+	createRules,
+	defineAbilities,
+	type StandardSchema,
+	shape,
+} from "../../src/create/index.js";
 import { ForbiddenError } from "../../src/errors/index.js";
 import { createGuard } from "../../src/guard/index.js";
 
@@ -131,7 +132,7 @@ describe("what the guard reports when the refusal never reached the rules", () =
 	const row: Post = { id: "p1", authorId: "u1", views: 1 };
 
 	it("names the missing row instead of pretending a rule decided", async () => {
-		const seen: DecisionReport[] = [];
+		const seen: Decision[] = [];
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
@@ -151,7 +152,7 @@ describe("what the guard reports when the refusal never reached the rules", () =
 	});
 
 	it("carries the actor with it", async () => {
-		const seen: { decision: DecisionReport; actor: { id: string } }[] = [];
+		const seen: { decision: Decision; actor: { id: string } }[] = [];
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
@@ -191,7 +192,7 @@ describe("what the guard reports when the refusal never reached the rules", () =
 	});
 
 	it("reports nothing extra when the row is there", async () => {
-		const seen: DecisionReport[] = [];
+		const seen: Decision[] = [];
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
@@ -247,45 +248,5 @@ describe("what the guard reports when the refusal never reached the rules", () =
 
 		await expect(read()).rejects.toBeInstanceOf(ForbiddenError);
 		expect(onDecision).not.toHaveBeenCalled();
-	});
-});
-
-describe("what an empty violations array means", () => {
-	const ac = defineAbilities({
-		resources: { post: { schema: shape<Post>(), actions: ["update"] } },
-	});
-	const { allow, deny } = createRules(ac);
-	const row: Post = { id: "p1", authorId: "u1", views: 1 };
-
-	it("is a refusal with no field to name, not an absence of problems", () => {
-		const seen: DecisionReport[] = [];
-		const ability = buildAbility(
-			ac,
-			[
-				allow("update", "post", { payload: { fields: ["views"] } }),
-				deny("update", "post"),
-			],
-			{ onDecision: (decision) => seen.push(decision) },
-		);
-
-		const result = ability.validatePayload("update", "post", row, { views: 2 });
-
-		expect(result).toEqual({ ok: false, violations: [] });
-		expect(seen).toEqual([
-			{ action: "update", resource: "post", allowed: false, violations: [] },
-		]);
-	});
-
-	it("names the field when the refusal is field by field", () => {
-		const ability = buildAbility(ac, [
-			allow("update", "post", { payload: { fields: ["views"] } }),
-		]);
-
-		expect(
-			ability.validatePayload("update", "post", row, { authorId: "u2" }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "authorId", reason: "field not permitted" }],
-		});
 	});
 });

@@ -57,7 +57,7 @@ const ac = defineAbilities({
 
 const browser = `
 import { defineAbilities, shape, buildAbility, parseRules } from "${coreDist}";${declare}
-const parsed = parseRules(JSON.parse(globalThis.raw), ac);
+const parsed = parseRules(JSON.parse(globalThis.raw));
 if (!parsed.ok) throw new Error(parsed.errors.join("\\n"));
 const ability = buildAbility(ac, parsed.rules);
 globalThis.out = ability.can("update", "post", globalThis.post);
@@ -132,39 +132,32 @@ const built =
 			newestMtime(`${repo}/packages/react/src`),
 		);
 
-if (!built) {
-	console.log(
-		"readme-size: skipped — run `pnpm build` first, this measures dist/",
-	);
-}
+describe("the README's bundle sizes are what a bundler produces", () => {
+	beforeAll(async () => {
+		expect(built, "run `pnpm build` first — this measures dist/").toBe(true);
 
-describe.skipIf(!built)(
-	"the README's bundle sizes are what a bundler produces",
-	() => {
-		beforeAll(async () => {
-			size.browser = (await ship(browser)).kB;
-			size.trusted = (await ship(trusted)).kB;
-			size.whole = (await ship(whole)).kB;
-			size.gate = (await ship(serverGate)).bytes;
-		}, 120_000);
+		size.browser = (await ship(browser)).kB;
+		size.trusted = (await ship(trusted)).kB;
+		size.whole = (await ship(whole)).kB;
+		size.gate = (await ship(serverGate)).bytes;
+	}, 120_000);
 
-		for (const file of ["README.md", "README.ru.md"]) {
-			for (const claim of claims) {
-				it(`${file}: ${claim.what}`, () => {
-					const text = readFileSync(`${repo}/${file}`, "utf8");
-					const pattern = file.endsWith(".ru.md") ? claim.ru : claim.en;
-					const found = [...text.matchAll(new RegExp(pattern.source, "g"))];
+	for (const file of ["README.md", "README.ru.md"]) {
+		for (const claim of claims) {
+			it(`${file}: ${claim.what}`, () => {
+				const text = readFileSync(`${repo}/${file}`, "utf8");
+				const pattern = file.endsWith(".ru.md") ? claim.ru : claim.en;
+				const found = [...text.matchAll(new RegExp(pattern.source, "g"))];
 
-					expect(
-						found.length,
-						`expected a ${claim.what} claim in ${file} — did the wording change?`,
-					).toBeGreaterThan(0);
+				expect(
+					found.length,
+					`expected a ${claim.what} claim in ${file} — did the wording change?`,
+				).toBeGreaterThan(0);
 
-					for (const match of found) {
-						expect(match[1]).toBe(claim.get());
-					}
-				});
-			}
+				for (const match of found) {
+					expect(match[1]).toBe(claim.get());
+				}
+			});
 		}
-	},
-);
+	}
+});

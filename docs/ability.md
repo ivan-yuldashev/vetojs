@@ -19,7 +19,7 @@ It holds no state and mutates nothing — `ability.rules` is the array of rules 
 | Method | Answers |
 |---|---|
 | `can` / `cannot` | may this action happen — with a row, or without one |
-| `authorize` | same as `can`, but throws `ForbiddenError` |
+| `authorize` | same as `can` with a row, but throws `ForbiddenError`; without one it does not guess |
 | `canMutate` | may this row be written — see [mutations](./mutations.md) |
 | `validatePayload` | may *this data* be written |
 | `permittedFields` | which fields the UI should let them edit |
@@ -29,7 +29,7 @@ It holds no state and mutates nothing — `ability.rules` is the array of rules 
 
 ## One decision, three ways to report it
 
-`can`, `cannot` and `authorize` all evaluate **the same thing**. They differ only in how the answer comes back, so you can pick the one that fits the call site:
+Given a row, `can`, `cannot` and `authorize` all evaluate **the same thing**. They differ only in how the answer comes back, so you can pick the one that fits the call site:
 
 ```ts
 if (ability.can("update", "post", post)) { … }                  // a boolean, to branch on
@@ -52,9 +52,16 @@ ability.can("create", "post");        // show the "New post" button?
 ability.can("update", "post", post);  // enable Edit on this row?
 ```
 
-Both forms are available on all three methods, including `authorize` — a route handler guarding "may this user create posts at all" has no row to pass.
+`authorize` takes both forms too, but without a row it does not answer optimistically. It passes only when no row could change the answer: an `allow` with no `where` covers the action, and no `deny` reads the row. That is what a route handler guarding "may this user create posts at all" needs, and it is why the same call refuses an actor who may update only their own posts:
 
-> **The row-less form answers a weaker question, and nothing stops you using it by mistake.** If the operation touches a specific row, pass that row. `authorize("update", "post")` compiles and will happily pass for an actor who may update *some* post — but not this one.
+```ts
+// allow("create", "post"), allow("update", "post", { where: { authorId: user.id } })
+ability.authorize("create", "post");        // passes
+ability.authorize("update", "post");        // throws — which post?
+ability.authorize("update", "post", post);  // exact
+```
+
+> **`can` without a row answers a weaker question, and nothing stops you using it by mistake.** If the operation touches a specific row, pass that row: `can("update", "post")` is `true` for an actor who may update *some* post — but not this one.
 
 ## Catching the refusal
 
@@ -101,6 +108,10 @@ belongs to one actor, so the hook's own closure already has them.
 `rule` is the `deny` that fired or the `allow` that granted, and it is absent
 when nothing matched and the default denied — which is the case worth alerting
 on, because it means a policy said nothing about a question someone asked.
+It is absent too when a deciding call without a row refused because the answer
+depended on one: a condition speaks about a row, so no rule refused. A `deny`
+that fires on data it could not compare, in a row that was passed, is named:
+the row was there, and the deny read it.
 
 It fires for `can`, `cannot`, `authorize`, `canMutate` and `validatePayload`,
 once per call. A payload decision carries no `rule`, because a refusal there is
@@ -110,9 +121,25 @@ refusal in a log: `{ field: "authorId", reason: "field not permitted" }` says
 someone tried to write a field they do not own. An **empty** `violations` list is
 still a refusal — the write was turned down whole, by a blanket `deny` or for want
 of an `allow`, so no field was left to name. Not for `where`, `permittedFields` or `validate`: those ask what
-a policy says, not whether an actor may act. Whatever the hook throws reaches
-your caller untouched, so keep it to recording — the verdict is decided before
-it runs and nothing it does can change the answer.
+a policy says, not whether an actor may act.
+
+The verdict is settled before the hook runs, so nothing it does can change the
+answer. A hook that **throws** is different: the call stops there and your
+exception reaches the caller in place of the answer, so none of the calls above
+hands back a grant it could not record. Catch inside your own hook when telemetry must not block a
+check:
+
+```ts
+const ability = buildAbility(ac, policyFor(currentUser), {
+	onDecision: (decision) => {
+		try {
+			log.info(decision);
+		} catch (error) {
+			console.warn("veto: decision hook failed", error);
+		}
+	},
+});
+```
 
 Neither the row nor the data is in the report. Field names are; values are not,
 because a decision log is not where they belong by default. Both are in scope
@@ -121,11 +148,13 @@ where you write the hook, so a log that needs them can close over them.
 ## `permittedFields` — for forms
 
 ```ts
-ability.permittedFields("update", "post", ["title", "status", "views"]);
+ability.permittedFields("update", "post", post, ["title", "status", "views"]);
 // → ["title", "status"]
 ```
 
 You pass the field universe rather than getting it for free, because a schema can't be asked for its keys — `shape<T>()` is erased at runtime, and Standard Schema doesn't enumerate them either.
+
+The row makes the answer exact — the one `validatePayload` gives for each field, so a field a `deny` takes away from this particular row drops out. Pass `undefined` when the row is not at hand and the answer is optimistic, as it is for `can`: a field the rules cannot settle without a row stays in the list, and `validatePayload` refuses it once the row is known.
 
 This drives the UI. The server still enforces with `validatePayload`; a disabled input is a courtesy, not a control.
 
@@ -160,12 +189,13 @@ When data of unverified shape has to enter, use the gate for its kind rather tha
 
 ## Rules your declarations don't mention
 
-`buildAbility` doesn't throw, drop, or warn on them — by the time rules reach it they are trusted, and the checking already happened upstream: at compile time via `createRules`, or at runtime via `parseRules` with a vocabulary. That's also why `buildAbility` only accepts checked rules — see [parse](./parse.md).
+`buildAbility` doesn't throw, drop, or warn on them — by the time rules reach it they are trusted, and the checking already happened upstream: at compile time via `createRules`, or at runtime via `parseRules`. That's also why `buildAbility` only accepts checked rules — see [parse](./parse.md).
 
 ## Why it works this way
 
 - **Plain data and closures, never a class.** Nothing to serialise around, nothing to mutate, safe to build per request in a server component.
 - **`authorize` returns nothing.** It's a guard, not a transformer — the row you passed in is already typed.
+- **`authorize` without a row refuses what only a row could settle.** It stands where an operation is about to happen, and "allowed for some row" is no reason to proceed there. `can` without a row stays optimistic, because a hidden button is a courtesy and the check happens on the server.
 - **`canMutate` and `validatePayload` take a partial row**, because a pre-insert candidate has no database-generated `id` or `createdAt` yet, and demanding a complete row would force a cast at every create.
 - **`ability.rules` is the wire format.** Send it to the client, hand it to `<AbilityProvider rules={…}>`, and the same rules drive the UI.
 

@@ -1,9 +1,8 @@
 # ⚡ @vetojs/drizzle
 
-> Permissions as SQL: the policy becomes a `WHERE`, and the query returns exactly the rows the user is allowed to see.
+> Permissions as SQL: the policy becomes a `WHERE`, and the query returns exactly the rows the user — or the agent acting for them — is allowed to see.
 
 [![NPM version](https://img.shields.io/npm/v/%40vetojs%2Fdrizzle)](https://www.npmjs.com/package/@vetojs/drizzle)
-[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/@vetojs/drizzle?activeTab=dependencies)
 [![Postgres](https://img.shields.io/badge/postgres-supported-336791)](https://orm.drizzle.team)
 [![License](https://img.shields.io/npm/l/%40vetojs%2Fdrizzle)](https://github.com/ivan-yuldashev/vetojs/blob/main/LICENSE)
 [![Socket](https://socket.dev/api/badge/npm/package/@vetojs/drizzle)](https://socket.dev/npm/package/@vetojs/drizzle)
@@ -19,7 +18,7 @@ But a list needs the opposite question: not "may I touch this row" but "which ro
 - **Permissions are written once.** The `WHERE` condition is assembled from the same rules `can()` answers by. There is no separate description of access for SQL.
 - **The match is tested, not asserted.** A conformance grid runs both paths — `can()` over loaded rows and a real `SELECT` — against live Postgres, over rows carrying `NULL`s in every column, and requires the two id sets to be identical.
 - **Joins derive themselves.** Relations are assembled from the foreign keys your schema already declares. You only write a join by hand where the predicate needs more than a key match.
-- **0 dependencies.** `@vetojs/core` and `drizzle-orm` are peer dependencies.
+- **An agent's search sees what its person may.** A tool that lists or searches through `schema.filter` returns the rows the person the agent acts for may read, not every row the server can reach.
 
 ---
 
@@ -33,7 +32,7 @@ npm install @vetojs/drizzle @vetojs/core drizzle-orm
 pnpm add @vetojs/drizzle @vetojs/core drizzle-orm
 ```
 
-ESM only, Node.js 20 or newer. Postgres for now.
+ESM only, Node.js 20 or newer. Postgres for now. `@vetojs/core` and `drizzle-orm` are peer dependencies; the package adds nothing else to the tree.
 
 ### 2. Map resources to tables
 
@@ -96,8 +95,6 @@ The alternative to the adapter is selecting rows from the database and sifting o
 | `UPDATE` and `DELETE` | "read, then check", with a window in between | the same predicate in the `WHERE`, no window |
 | Agreement with `can()` | on your conscience | checked by a test against live Postgres |
 
-CASL solves a similar problem with `accessibleBy`, but it needs an adapter for a specific ORM. Prisma and Mongoose have one; for SQL and Sequelize [the request has been open since 2017](https://github.com/stalniy/casl/issues/8) — which means the route is simply unavailable on Drizzle, and the rules would have to be rewritten into a `WHERE` by hand, a second time and with nothing checking them against `can()`.
-
 ## The same predicate on a write
 
 A `WHERE` belongs on an `UPDATE` and a `DELETE` too:
@@ -128,6 +125,10 @@ const condition = toDrizzle(ability.where("read", "post"), posts);
 ```
 
 Relations are not expanded this way — `toDrizzle` works over a single table.
+
+## Compared with CASL
+
+CASL solves a similar problem with `accessibleBy`, but it needs an adapter for a specific ORM. Prisma and Mongoose have one; for SQL and Sequelize [the request has been open since 2017](https://github.com/stalniy/casl/issues/8) — which means the route is simply unavailable on Drizzle, and the rules would have to be rewritten into a `WHERE` by hand, a second time and with nothing checking them against `can()`.
 
 ## Contributing
 

@@ -108,7 +108,7 @@ ability.authorize("delete", "post", post); // throws ForbiddenError
 
 The row-less form answers *could this be allowed for any row at all* — it is for deciding whether to render a control, not for guarding an operation on a specific row. If you have the row, pass it.
 
-**Field-level checks.** CASL's `can("update", post, "title")` has no direct twin. Veto separates the questions: `ability.permittedFields("update", "post", fields)` for the UI, and `ability.validatePayload(...)` on the server, which returns the validated data or the exact violations. See [writes](./mutations.md).
+**Field-level checks.** CASL's `can("update", post, "title")` has no direct twin. Veto separates the questions: `ability.permittedFields("update", "post", post, fields)` for the UI, and `ability.validatePayload(...)` on the server, which returns the validated data or the exact violations. See [writes](./mutations.md).
 
 ## React
 
@@ -220,12 +220,12 @@ Veto answers **unknown** for a present value of the wrong type: an `allow` grant
 If you store rules as JSON, validate them at the boundary before building:
 
 ```ts
-const result = parseRules(JSON.parse(raw), ac);
+const result = parseRules(JSON.parse(raw));
 if (!result.ok) throw new Error(result.errors.join("\n"));
 const ability = buildAbility(ac, result.rules);
 ```
 
-`buildAbility` accepts only rules that provably passed a check — from `createRules` or from `parseRules` with a vocabulary. See [rules from outside](./parse.md).
+`buildAbility` accepts only rules that provably passed a check — from `createRules` or from `parseRules`. See [rules from outside](./parse.md).
 
 ## Checklist
 

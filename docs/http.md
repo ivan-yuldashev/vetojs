@@ -23,7 +23,7 @@ Each framework has one way to say "this slot holds an ability", and it is worth 
 ```ts
 type AppBindings = {
 	Variables: {
-		ability: AbilitySet<typeof ac>;
+		ability: Ability<typeof ac>;
 		user: { id: string };
 	};
 };
@@ -35,7 +35,7 @@ const authorization = createMiddleware<AppBindings>(async (c, next) => {
 });
 ```
 
-In Express the slot is declared by augmenting the request — `declare global { namespace Express { interface Request { ability: AbilitySet<typeof ac> } } }` — and in Fastify by augmenting `FastifyRequest` in a `declare module "fastify"` block. Same three lines, same result.
+In Express the slot is declared by augmenting the request — `declare global { namespace Express { interface Request { ability: Ability<typeof ac> } } }` — and in Fastify by augmenting `FastifyRequest` in a `declare module "fastify"` block. Same three lines, same result.
 
 ## Guard a write
 

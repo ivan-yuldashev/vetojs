@@ -108,7 +108,7 @@ ability.authorize("delete", "post", post); // бросает ForbiddenError
 
 Форма без строки отвечает на вопрос *возможно ли это хоть для какой-то строки* — она для решения, рисовать ли элемент управления, а не для защиты операции над конкретной строкой. Если строка есть — передайте её.
 
-**Проверки по полям.** У `can("update", post, "title")` из CASL прямого близнеца нет. Veto разделяет вопросы: `ability.permittedFields("update", "post", fields)` для интерфейса и `ability.validatePayload(...)` на сервере — он возвращает проверенные данные либо точный список нарушений. См. [запись](./mutations.ru.md).
+**Проверки по полям.** У `can("update", post, "title")` из CASL прямого близнеца нет. Veto разделяет вопросы: `ability.permittedFields("update", "post", post, fields)` для интерфейса и `ability.validatePayload(...)` на сервере — он возвращает проверенные данные либо точный список нарушений. См. [запись](./mutations.ru.md).
 
 ## React
 
@@ -220,12 +220,12 @@ Veto на присутствующее значение неверного ти�
 Если правила хранятся в JSON, проверьте их на границе до сборки:
 
 ```ts
-const result = parseRules(JSON.parse(raw), ac);
+const result = parseRules(JSON.parse(raw));
 if (!result.ok) throw new Error(result.errors.join("\n"));
 const ability = buildAbility(ac, result.rules);
 ```
 
-`buildAbility` принимает только правила, доказуемо прошедшие проверку, — из `createRules` либо из `parseRules` со словарём. См. [правила извне](./parse.ru.md).
+`buildAbility` принимает только правила, доказуемо прошедшие проверку, — из `createRules` либо из `parseRules`. См. [правила извне](./parse.ru.md).
 
 ## Порядок действий
 

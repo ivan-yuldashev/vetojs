@@ -35,6 +35,7 @@ export const postsTable = pgTable("posts", {
 	status: text("status", { enum: ["draft", "published"] }).notNull(),
 	title: text("title").notNull(),
 	views: integer("views").notNull(),
+	slug: text("slug").notNull(),
 });
 export const commentsTable = pgTable("comments", {
 	id: text("id").primaryKey(),
@@ -89,11 +90,13 @@ const store = globalThis as unknown as {
 };
 
 export const getDb = (): Promise<PgliteDatabase> => {
-	store.__vetoDemoDb ??= (async () => {
-		const db = drizzle(new PGlite());
-		await seed(db);
-		return db;
-	})();
+	if (store.__vetoDemoDb === undefined) {
+		store.__vetoDemoDb = (async () => {
+			const db = drizzle(new PGlite());
+			await seed(db);
+			return db;
+		})();
+	}
 	return store.__vetoDemoDb;
 };
 

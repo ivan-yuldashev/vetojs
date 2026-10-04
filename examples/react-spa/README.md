@@ -18,7 +18,7 @@ Switch between three actors — alice (admin), bob (editor), carol (viewer here,
 
 **Route protection, two ways.** Hiding a nav link is UX — the route still guards itself. `/posts/:id` and `/posts/:id/edit` answer with a 403 panel through the same ability that hid the link; `/workspaces/:id/settings` redirects instead. Deep-linking to a forbidden URL is covered either way.
 
-**A forged rule, rejected at the door.** The delivered JSON has an extra `allow delete workspace` spliced in — an action that doesn't exist. `parseRules(json, ac)` quarantines it and the app runs on the safe subset; the panel names what was dropped. A forged *deny* would be kept instead, because the gate is only ever allowed to narrow access.
+**A tampered batch, turned away at the door.** The panel also parses a rule carrying an operator that does not exist. `parseRules(json)` refuses the whole delivery and names the path that failed — the engine never sees a rule the gate could not read. Names are a different question: the gate checks shape, and rules have to come from the same generation as the build reading them.
 
 **Forms driven by `permittedFields`** — bob sees `title` and `status` as editable. Whether a particular *value* is allowed is enforced on the server, as the next-app demo shows.
 

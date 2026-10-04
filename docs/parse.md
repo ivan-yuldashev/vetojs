@@ -7,7 +7,7 @@ Rules being plain JSON is what makes them easy to store and ship. It is also wha
 ```ts
 import { buildAbility, parseRules } from "@vetojs/core";
 
-const result = parseRules(JSON.parse(raw), ac);
+const result = parseRules(JSON.parse(raw));
 
 if (!result.ok) {
 	throw new Error(`Invalid rules:\n${result.errors.join("\n")}`);
@@ -37,67 +37,43 @@ rules[2].effect: expected "allow" | "deny"
 
 - the top level is an array of objects;
 - `effect` is exactly `allow` or `deny`;
-- `action` is a string or array of strings; `resource` is a string;
-- `where`, if present, is a well-formed condition — known operators, `in`/`nin` carrying real arrays, relations with a valid `one`/`many` shape;
-- every condition node carries **exactly one** shape: a node naming both `and` and `field` is refused, in a `where` and in `payload.constraints` alike;
-- `payload`, if present, has string `fields` and flat `constraints`.
+- `action` is an action name or a non-empty list of them; `resource` is a resource name — an empty name or list is refused, since it matches nothing;
+- `where`, if present, is a well-formed condition — known operators, each carrying a value it can compare (a real array for `in`, `nin`, `hasAny` and `hasAll`, a boolean for `exists`, a string for `contains`, a number or a string for `gt`, `gte`, `lt` and `lte`), groups naming at least one condition, relations with a valid `one`/`many` shape;
+- every condition node carries **exactly one** shape: a node naming both `and` and `field` is refused, in a `where` and in `values` alike;
+- `fields`, if present, is a non-empty list of non-empty field names, and `values` is flat; a `payload` key is refused, since a rule carries `fields` and `values` itself.
 
 ## Names this deployment doesn't know
 
-Shape checking can't catch a rule that is perfectly well-formed but mentions something that doesn't exist here — `resource: "psot"`, or an action from a newer version of your schema during a rolling deploy.
+Shape checking cannot catch a rule that is perfectly well-formed but mentions something that doesn't exist here — `resource: "psot"`, or an action from a newer version of your schema during a rolling deploy.
 
-These two cases are not symmetrical:
+**Names are not checked against anything, deliberately.** Where rules are written, the compiler answers the question: `createRules(ac)` refuses an action your declarations don't carry, and it does so before the code runs. Where rules arrive from outside, the answer is code generation from the same source that produced them — a check reports the drift after it happened, generation stops it from happening.
 
-- an unknown **allow** grants nothing — harmless in itself;
-- an unknown **deny** is a *protection that silently isn't there* — the dangerous one.
+What that leaves you responsible for: rules and the build reading them come from the same generation. The failure modes are not equally loud, and it is worth knowing which is which.
 
-So when you pass your declarations as the vocabulary, the gate treats them differently:
+| A rule naming something this build lacks | What a check does |
+|---|---|
+| an unknown resource or action | matches nothing — an `allow` grants nothing, a `deny` protects nothing |
+| an unknown relation | throws `RelationNotLoadedError` when a check reaches it: the row cannot carry what the build never declared, and a missing relation is a data error, not a refusal |
 
-| Rule mentioning something unknown | What happens | Why |
-|---|---|---|
-| `allow` | **quarantined** — reported, not applied | it may not grant access to something this deployment doesn't have |
-| `deny` | **kept** and reported | it must keep protecting; removing it could only widen access |
-
-```ts
-const result = parseRules(json, ac);
-
-if (!result.ok) throw new Error(result.errors.join(", "));
-
-result.unknown; // [{ rule, reasons, quarantined }]
-```
-
-**`parseRules(json, ac)` and `parseRules(json, toVocabulary(ac))` are interchangeable.** The gate reads only the action names and the relations, and a resource declaration is a vocabulary entry with a schema attached, so passing either answers the same. Prefer `toVocabulary(ac)` when the vocabulary is stored: it is the serialisable half, without the schemas, and it is what you keep in a database beside the rules.
-
-What you do with `unknown` is your policy, one line either way:
-
-```ts
-expect(result.unknown).toEqual([]);          // in CI, a typo should fail the build
-if (result.unknown.length) log.warn(...);    // in production, skew is telemetry
-```
-
-**The gate can only narrow access.** Dropping allows and keeping denies cannot turn a denied call into an allowed one — so a deploy where the database is ahead of the code is safe by construction. This is property-tested, not just asserted.
-
-Field names are deliberately **not** checked: a Standard Schema doesn't enumerate its keys, and the engine handles an absent field as a decidable non-match anyway.
+Field names are deliberately **not** checked either: a Standard Schema doesn't enumerate its keys, and the engine handles an absent field as a decidable non-match anyway.
 
 ## You can't forget the gate
 
 `buildAbility` doesn't accept a raw `Rule[]`. It accepts rules that provably went through a check, which happens in exactly two places:
 
 1. `createRules(ac)` — the compiler verified them;
-2. `parseRules(input, vocabulary)` — this gate verified them.
+2. `parseRules(input)` — this gate verified them.
 
 ```ts
 const rules: Rule[] = load();
 
-buildAbility(ac, rules);                                 // ✗ not checked
-buildAbility(ac, parseRules(JSON.parse(raw), ac).rules); // ✓
+buildAbility(ac, rules);                             // ✗ not checked
+buildAbility(ac, parseRules(JSON.parse(raw)).rules); // ✓
 ```
 
 One gap worth knowing: `JSON.parse` returns `any`, and `any` defeats every type. `buildAbility(ac, JSON.parse(raw))` therefore *does* compile. The marker catches the mistakes a type can catch — a hand-written literal, a plain `Rule[]` — not a value that has thrown its type away. Route untrusted JSON through the gate because it is untrusted, not because the compiler will stop you.
 
 The marker is type-level only — rules stay plain JSON with no extra properties — and it deliberately does not survive `JSON.parse`. Deserialised rules must pass the gate again, which is the entire point.
-
-Calling `parseRules` *without* a vocabulary checks shape only and returns unbranded rules, so it won't satisfy `buildAbility` on its own. The escape hatch, when you really mean it (constructing intentionally broken rules in a test), is a visible `as CheckedRules` cast.
 
 ## Why it works this way
 
@@ -108,4 +84,4 @@ Calling `parseRules` *without* a vocabulary checks shape only and returns unbran
 
 ## Source
 
-[`api/parse.ts`](../packages/core/src/api/parse.ts) · tests: [parse](../packages/core/tests/api/parse.test.ts), [vocabulary](../packages/core/tests/api/vocabulary.test.ts)
+[`validate/parse.ts`](../packages/core/src/validate/parse.ts) · tests: [parse](../packages/core/tests/validate/parse.test.ts)
