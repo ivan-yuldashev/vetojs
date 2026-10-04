@@ -115,7 +115,8 @@ Nothing else changes. Rules, evaluation and `can()` never consult the schema —
 type AC = typeof ac;
 
 ResourceName<AC>;      // "post" | "blog" | "comment"
-ActionFor<AC, "post">; // "read" | "create" | "update" | "delete" | "publish" | "manage"
+ActionFor<AC, "post">;      // "read" | "create" | "update" | "delete" | "publish" | "manage" — what a rule names
+DeclaredAction<AC, "post">; // "read" | "create" | "update" | "delete" | "publish" — what a question names
 ShapeOf<AC, "post">;   // Post
 ```
 
@@ -125,10 +126,9 @@ These flow into `createRules(ac)` and `buildAbility(ac, …)`, which is why a ty
 
 - **`const` type parameter instead of `as const`.** The literal action names are captured for you, so the declaration stays clean.
 - **Each resource keeps its own shape.** A single shared shape parameter would collapse resources of different shapes into one; here `ShapeOf` reads each `schema` individually.
-- **`type` is the former name of `shape`.** It is deprecated and still exported: the two are the same function, so rename whenever it suits you. `type` collides with the TypeScript modifier, so an import line carrying both reads like a typo and sorters order it differently between runs.
 - **`schema` carries a type, it isn't data.** `shape<T>()` exists purely to smuggle `T` into the type system at zero runtime cost. Swap in a Standard Schema when you want `ability.validate` to actually check incoming data — see [ability](./ability.md).
 - **Rules referencing something you didn't declare are caught.** With typed factories it is a compile error. For rules arriving as JSON at runtime, the same check happens at the trust boundary — see [parse](./parse.md).
 
 ## Source
 
-[`api/define-abilities.ts`](../packages/core/src/api/define-abilities.ts) · [`api/schema.ts`](../packages/core/src/api/schema.ts) · [tests](../packages/core/tests/api/define-abilities.test.ts)
+[`create/define-abilities.ts`](../packages/core/src/create/define-abilities.ts) · [`create/schema.ts`](../packages/core/src/create/schema.ts) · [tests](../packages/core/tests/create/define-abilities.test.ts)

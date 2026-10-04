@@ -17,7 +17,7 @@ One page per concept, each describing how the shipped code actually behaves. Sta
 ## Getting a policy running
 
 1. **[Declaring resources](./define-abilities.md)** — `defineAbilities`: what exists and what can be done to it. Everything else infers from here.
-2. **[What a rule is](./rules.md)** — the data model, and the `where` / `payload` split.
+2. **[What a rule is](./rules.md)** — the data model, and the row, field and value levels.
 3. **[Writing policies](./create-rules.md)** — `createRules`: typed `allow` / `deny` factories.
 4. **[Checking access](./ability.md)** — `buildAbility`: `can`, `authorize`, `permittedFields`, `validate`.
 

@@ -1,9 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { buildAbility } from "../../src/api/ability.js";
-import type { CheckedRules } from "../../src/api/checked-rules.types.js";
-import { createRules } from "../../src/api/create-rules.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { shape } from "../../src/api/schema.js";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { buildAbility } from "../../src/api/index.js";
+import { createRules, defineAbilities, shape } from "../../src/create/index.js";
+import type { CheckedRules } from "../../src/model/index.js";
 
 type Post = { id: string; authorId: string; views: number };
 
@@ -32,14 +30,25 @@ describe("an ability answers from the policy it was built with", () => {
 			expect(ability.rules[0]).toBe(rules[0]);
 		});
 
-		it("refuses to have that list changed under it", () => {
+		it("ignores what is done to the list it handed back", () => {
 			const ability = buildAbility(ac, [allow("read", "post")]);
 
-			expect(Object.isFrozen(ability.rules)).toBe(true);
-			expect(() =>
-				(ability.rules as CheckedRules).push(deny("read", "post")),
-			).toThrow(TypeError);
-			expect(ability.rules).toHaveLength(1);
+			expect(ability.can("read", "post", post)).toBe(true);
+
+			(ability.rules as CheckedRules).push(deny("read", "post"));
+
+			expect(ability.can("read", "post", post)).toBe(true);
+			expect(ability.rules).toHaveLength(2);
+		});
+
+		it("is handed back read-only", () => {
+			const ability = buildAbility(ac, [allow("read", "post")]);
+			const append = () => {
+				// @ts-expect-error the list an ability hands back is read-only
+				ability.rules.push(deny("read", "post"));
+			};
+
+			expectTypeOf(append).toBeFunction();
 		});
 
 		it("ignores a deny appended after a pair was already asked about", () => {
@@ -89,27 +98,15 @@ describe("an ability answers from the policy it was built with", () => {
 	});
 
 	describe("the rule objects themselves", () => {
-		it("ignores a condition value swapped after the first check", () => {
+		it("reads the rule as it stands now when a new ability is built", () => {
 			const rule = allow("read", "post", { where: { authorId: "u1" } });
-			const ability = buildAbility(ac, [rule]);
 
-			expect(ability.can("read", "post", post)).toBe(true);
-
-			const where = rule.where as { value: unknown };
-			where.value = "u2";
-
-			expect(ability.can("read", "post", post)).toBe(true);
 			expect(buildAbility(ac, [rule]).can("read", "post", post)).toBe(true);
-		});
-
-		it("reads a rule swapped before the first check, as it was never asked", () => {
-			const rule = allow("read", "post", { where: { authorId: "u1" } });
-			const ability = buildAbility(ac, [rule]);
 
 			const where = rule.where as { value: unknown };
 			where.value = "u2";
 
-			expect(ability.can("read", "post", post)).toBe(false);
+			expect(buildAbility(ac, [rule]).can("read", "post", post)).toBe(false);
 		});
 
 		it("keeps two abilities built from one array apart", () => {
@@ -182,7 +179,7 @@ describe("an ability answers from the policy it was built with", () => {
 		});
 	});
 
-	describe("rules that arrived broken", () => {
+	describe("rules that arrived from outside", () => {
 		it("answers no for a rule naming a resource that does not exist", () => {
 			const ability = buildAbility(ac, [
 				{ effect: "allow", action: "read", resource: "ghost" },
@@ -190,29 +187,6 @@ describe("an ability answers from the policy it was built with", () => {
 
 			expect(ability.can("read", "post", post)).toBe(false);
 			expect(ability.can("read", "ghost" as "post", post)).toBe(true);
-		});
-
-		it("survives a rule with no action at all", () => {
-			const ability = buildAbility(ac, [
-				{ effect: "allow", resource: "post" },
-				allow("read", "post"),
-			] as CheckedRules);
-
-			expect(ability.can("read", "post", post)).toBe(true);
-			expect(ability.can("update", "post", post)).toBe(false);
-		});
-
-		it("does not grant on a where that is not a condition", () => {
-			const ability = buildAbility(ac, [
-				{
-					effect: "allow",
-					action: "read",
-					resource: "post",
-					where: { nonsense: true },
-				},
-			] as unknown as CheckedRules);
-
-			expect(ability.can("read", "post", post)).not.toBe(true);
 		});
 	});
 });

@@ -1,5 +1,5 @@
 import { parseRules } from "@vetojs/core";
-import { ac, actors, policyFor, workspaces } from "@vetojs-examples/shared";
+import { actors, policyFor, workspaces } from "@vetojs-examples/shared";
 import { useState } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router";
 import { AbilityProvider, Can, useSetRules } from "./authz.js";
@@ -15,7 +15,14 @@ import {
 type ActorName = keyof typeof actors;
 const actorNames = Object.keys(actors) as ActorName[];
 
-const forgedRule = { effect: "allow", action: "delete", resource: "workspace" };
+const tamperedRule = {
+	effect: "allow",
+	action: "delete",
+	resource: "workspace",
+	where: { field: "id", op: "sudo", value: 1 },
+};
+
+const tampered = parseRules([tamperedRule]);
 
 const roleLabel: Record<ActorName, string> = {
 	alice: "alice — admin of Acme",
@@ -24,11 +31,11 @@ const roleLabel: Record<ActorName, string> = {
 };
 
 const wireFor = (name: ActorName) =>
-	JSON.stringify([...policyFor(actors[name]), forgedRule], null, 2);
+	JSON.stringify(policyFor(actors[name]), null, 2);
 
 const parseFor = (name: ActorName) => {
 	const json = wireFor(name);
-	const parsed = parseRules(JSON.parse(json), ac);
+	const parsed = parseRules(JSON.parse(json));
 	return { json, parsed };
 };
 
@@ -61,11 +68,6 @@ const Nav = () => (
 	</nav>
 );
 
-/**
- * Switching actors writes straight to the store. The provider sits above this
- * component and never re-renders, so nothing in the routed tree is touched —
- * only the gated nodes whose verdict actually moved.
- */
 const ActorSwitch = () => {
 	const setRules = useSetRules();
 	const [view, setView] = useState({ name: "carol" as ActorName, ...initial });
@@ -79,10 +81,6 @@ const ActorSwitch = () => {
 
 		setView({ name, ...next });
 	};
-
-	const quarantined = view.parsed.ok
-		? view.parsed.unknown.filter((entry) => entry.quarantined)
-		: [];
 
 	return (
 		<>
@@ -100,17 +98,18 @@ const ActorSwitch = () => {
 			</div>
 			<p className="muted">{roleLabel[view.name]}</p>
 
-			{quarantined.length > 0 && (
+			{!tampered.ok && (
 				<p className="muted">
-					trust boundary quarantined {quarantined.length} forged rule(s):{" "}
-					{quarantined.map((entry) => entry.reasons.join(", ")).join(" · ")} — a
-					forged <code>allow</code> cannot escalate access.
+					the trust boundary refused a tampered batch:{" "}
+					{tampered.errors.join(" · ")} — one rule the gate cannot read and the
+					whole delivery is turned away, so nothing half-understood reaches the
+					engine.
 				</p>
 			)}
 
 			<details>
 				<summary className="muted">
-					rules JSON as delivered to the client (incl. the forged rule)
+					rules JSON as delivered to the client
 				</summary>
 				<pre>{view.json}</pre>
 			</details>

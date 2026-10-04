@@ -23,7 +23,7 @@ const abilityFor = async (actorId: string) => {
 ```ts
 type AppBindings = {
 	Variables: {
-		ability: AbilitySet<typeof ac>;
+		ability: Ability<typeof ac>;
 		user: { id: string };
 	};
 };
@@ -35,7 +35,7 @@ const authorization = createMiddleware<AppBindings>(async (c, next) => {
 });
 ```
 
-В Express слот объявляют расширением запроса — `declare global { namespace Express { interface Request { ability: AbilitySet<typeof ac> } } }`, во Fastify — расширением `FastifyRequest` в блоке `declare module "fastify"`. Те же три строки, тот же результат.
+В Express слот объявляют расширением запроса — `declare global { namespace Express { interface Request { ability: Ability<typeof ac> } } }`, во Fastify — расширением `FastifyRequest` в блоке `declare module "fastify"`. Те же три строки, тот же результат.
 
 ## Охранять запись
 

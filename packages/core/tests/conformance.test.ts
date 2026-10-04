@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { compileWhere } from "../src/api/index.js";
-import { evaluateCondition, evaluateRules } from "../src/evaluation/index.js";
+import { compileMatcher } from "../src/compile/index.js";
 import type { ConditionNode, Rule } from "../src/model/index.js";
+import { evaluateRules, select } from "./select.js";
 
 type Post = {
 	authorId: string;
@@ -156,7 +156,7 @@ const cases: { name: string; action: string; rules: Rule<Post>[] }[] = [
 				effect: "deny",
 				action: "update",
 				resource: "post",
-				payload: { fields: ["status"] },
+				fields: ["status"],
 			},
 		],
 	},
@@ -170,16 +170,8 @@ const cases: { name: string; action: string; rules: Rule<Post>[] }[] = [
 				action: "update",
 				resource: "post",
 				where: { field: "status", op: "eq", value: "archived" },
-				payload: { fields: ["status"] },
+				fields: ["status"],
 			},
-		],
-	},
-	{
-		name: "allow + empty-payload deny (names nothing, stays a blanket veto)",
-		action: "update",
-		rules: [
-			{ effect: "allow", action: "update", resource: "post" },
-			{ effect: "deny", action: "update", resource: "post", payload: {} },
 		],
 	},
 ];
@@ -187,10 +179,13 @@ const cases: { name: string; action: string; rules: Rule<Post>[] }[] = [
 describe("conformance: instance-walk vs compiled where()", () => {
 	for (const { name, action, rules } of cases) {
 		it(name, () => {
-			const condition = compileWhere(rules, action, "post");
+			const condition = select(rules, action, "post").where;
 			for (const instance of instances) {
-				const walk = evaluateRules(rules, action, "post", instance);
-				const query = evaluateCondition(condition, instance as never);
+				const walk = evaluateRules(
+					select(rules, action, "post"),
+					instance,
+				).allowed;
+				const query = compileMatcher(condition)(instance as never);
 				expect(query === true).toBe(walk);
 			}
 		});
@@ -317,10 +312,10 @@ const relationRows: unknown[] = [
 describe("conformance: relations (walk vs compiled where())", () => {
 	for (const { name, action, rules } of relationCases) {
 		it(name, () => {
-			const condition = compileWhere(rules, action, "post");
+			const condition = select(rules, action, "post").where;
 			for (const row of relationRows) {
-				const walk = evaluateRules(rules, action, "post", row);
-				const query = evaluateCondition(condition, row as never);
+				const walk = evaluateRules(select(rules, action, "post"), row).allowed;
+				const query = compileMatcher(condition)(row as never);
 				expect(query === true).toBe(walk);
 			}
 		});

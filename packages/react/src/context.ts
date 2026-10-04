@@ -1,7 +1,7 @@
 "use client";
 
 import type {
-	AbilitySet,
+	Ability,
 	CheckedRule,
 	ResourceMap,
 	ResourceName,
@@ -19,12 +19,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { type AbilityStore, createAbilityStore } from "./store.js";
-import type {
-	AbilityProviderProps,
-	CanProps,
-	UseCan,
-	VetoContext,
-} from "./types.js";
+import type { AbilityProviderProps, CanProps, VetoContext } from "./types.js";
 
 const MISSING_ABILITY =
 	"<Can> needs an ability: render it inside <AbilityProvider> or pass the `ability` prop";
@@ -75,8 +70,8 @@ export const createVetoContext = <AC extends ResourceMap>(
 	};
 
 	const useVerdict = (
-		given: AbilitySet<AC> | undefined,
-		read: (ability: AbilitySet<AC>) => boolean,
+		given: Ability<AC> | undefined,
+		read: (ability: Ability<AC>) => boolean,
 	): boolean => {
 		const store = useContext(Context);
 
@@ -107,7 +102,7 @@ export const createVetoContext = <AC extends ResourceMap>(
 		return store;
 	};
 
-	const useAbility = (): AbilitySet<AC> => {
+	const useAbility = (): Ability<AC> => {
 		const store = useStore();
 		return useSyncExternalStore(store.subscribe, store.get, store.get);
 	};
@@ -121,21 +116,21 @@ export const createVetoContext = <AC extends ResourceMap>(
 		);
 	};
 
-	const useCan: UseCan<AC> = (action, resource, instance?) => {
+	const useCan: VetoContext<AC>["useCan"] = (action, resource, row?) => {
 		return useVerdict(undefined, (ability) =>
-			ability.can(action, resource, instance),
+			ability.can(action, resource, row),
 		);
 	};
 
 	const Can = <R extends ResourceName<AC>>({
 		I,
 		a,
-		this: instance,
+		this: row,
 		ability: given,
 		children,
 		fallback = null,
 	}: CanProps<AC, R>) => {
-		return useVerdict(given, (ability) => ability.can(I, a, instance))
+		return useVerdict(given, (ability) => ability.can(I, a, row))
 			? children
 			: fallback;
 	};

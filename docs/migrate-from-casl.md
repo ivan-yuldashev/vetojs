@@ -220,12 +220,12 @@ Veto answers **unknown** for a present value of the wrong type: an `allow` grant
 If you store rules as JSON, validate them at the boundary before building:
 
 ```ts
-const result = parseRules(JSON.parse(raw), ac);
+const result = parseRules(JSON.parse(raw));
 if (!result.ok) throw new Error(result.errors.join("\n"));
 const ability = buildAbility(ac, result.rules);
 ```
 
-`buildAbility` accepts only rules that provably passed a check — from `createRules` or from `parseRules` with a vocabulary. See [rules from outside](./parse.md).
+`buildAbility` accepts only rules that provably passed a check — from `createRules` or from `parseRules`. See [rules from outside](./parse.md).
 
 ## Checklist
 

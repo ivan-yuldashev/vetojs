@@ -107,7 +107,7 @@ export const PostEditPage = () => {
 		return <NotFound />;
 	}
 
-	const writable = ability.permittedFields("update", "post", [
+	const writable = ability.permittedFields("update", "post", post, [
 		"title",
 		"status",
 	]);

@@ -1,873 +1,312 @@
 import { describe, expect, it } from "vitest";
-import {
-	canMutate,
-	permittedFields,
-	validatePayload,
-} from "../../src/api/mutation.js";
-import type { Rule } from "../../src/model/index.js";
-import {
-	CONDITION_OPERATORS,
-	type ConditionOperator,
-} from "../../src/shared/constants/operators.js";
+import { permittedFields, validatePayload } from "../../src/api/mutation.js";
+import { createSelect } from "../../src/compile/index.js";
+import type {
+	ConditionNode,
+	FieldConditionNode,
+	Row,
+	Rule,
+} from "../../src/model/index.js";
 
-type Post = {
-	authorId: string;
-	status: "draft" | "published";
-	title: string;
-	featured: boolean;
-	views: number;
+const MINE: ConditionNode<Row> = { field: "authorId", op: "eq", value: "u1" };
+const BUSY: ConditionNode<Row> = { field: "views", op: "gt", value: 10 };
+const DRAFT: FieldConditionNode<Row> = {
+	field: "status",
+	op: "eq",
+	value: "draft",
+};
+const ARCHIVED: FieldConditionNode<Row> = {
+	field: "status",
+	op: "eq",
+	value: "archived",
 };
 
-const row: Post = {
-	authorId: "u1",
-	status: "draft",
-	title: "hello",
-	featured: false,
-	views: 0,
-};
+const mine = { id: "p1", authorId: "u1", status: "draft", views: 20 };
+const theirs = { ...mine, authorId: "u2" };
+const broken = { ...mine, views: "abc" };
 
-describe("canMutate", () => {
-	it("is true when an allow's where holds for the row", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				where: { field: "authorId", op: "eq", value: "u1" },
-			},
-		];
-		expect(canMutate(rules, "update", "post", row)).toBe(true);
-		expect(canMutate(rules, "update", "post", { ...row, authorId: "u2" })).toBe(
-			false,
-		);
+const rule = (effect: string, extra: Partial<Rule> = {}): Rule =>
+	({ effect, action: "update", resource: "post", ...extra }) as Rule;
+
+const FIELDS = ["id", "authorId", "status", "title"];
+
+const fieldsFor = (rules: Rule[], row: Row | undefined, fields = FIELDS) =>
+	permittedFields(createSelect(rules)("update", "post"), row, fields);
+
+const write = (rules: Rule[], row: Row | undefined, data: unknown) =>
+	validatePayload(createSelect(rules)("update", "post"), row, data);
+
+describe("the fields a form may offer", () => {
+	it("are the fields the rules settle as writable", () => {
+		expect(fieldsFor([rule("allow")], mine)).toEqual(FIELDS);
+		expect(
+			fieldsFor([rule("allow", { fields: ["status", "title"] })], mine),
+		).toEqual(["status", "title"]);
+		expect(
+			fieldsFor([rule("allow"), rule("deny", { fields: ["authorId"] })], mine),
+		).toEqual(["id", "status", "title"]);
+		expect(fieldsFor([], mine)).toEqual([]);
+		expect(fieldsFor([rule("allow"), rule("deny")], mine)).toEqual([]);
 	});
 
-	it("respects deny-override", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-			{ effect: "deny", action: "update", resource: "post" },
-		];
-		expect(canMutate(rules, "update", "post", row)).toBe(false);
+	it("keep a field the rules cannot settle without a row, and drop it with one", () => {
+		const rules = [rule("allow", { where: MINE, fields: ["title"] })];
+
+		expect(fieldsFor(rules, undefined)).toEqual(["title"]);
+		expect(fieldsFor(rules, mine)).toEqual(["title"]);
+		expect(fieldsFor(rules, theirs)).toEqual([]);
+		expect(fieldsFor([rule("allow", { where: BUSY })], broken)).toEqual([]);
 	});
 
-	it("denies by default when no rules apply", () => {
-		expect(canMutate([], "update", "post", row)).toBe(false);
+	it("keep a field a prohibition cannot settle without a row, and drop it with one", () => {
+		const rules = [
+			rule("allow"),
+			rule("deny", { where: MINE, fields: ["authorId"] }),
+		];
+
+		expect(fieldsFor(rules, undefined)).toEqual(FIELDS);
+		expect(fieldsFor(rules, mine)).toEqual(["id", "status", "title"]);
+		expect(fieldsFor(rules, theirs)).toEqual(FIELDS);
+	});
+
+	it("are none for a row the check will not read, whatever it carries", () => {
+		const entity = new (class Entity {
+			id = "p1";
+			authorId = "u1";
+		})();
+
+		for (const row of [entity, [mine], new Date()]) {
+			expect(
+				fieldsFor([rule("allow", { where: MINE })], row as unknown as Row),
+			).toEqual([]);
+		}
+	});
+
+	it("never include a name every object inherits", () => {
+		expect(
+			fieldsFor([rule("allow")], mine, [
+				"__proto__",
+				"constructor",
+				"prototype",
+				"id",
+			]),
+		).toEqual(["id"]);
+		expect(
+			fieldsFor(
+				[rule("allow", { fields: ["constructor", "prototype"] as never })],
+				undefined,
+				["constructor", "prototype"],
+			),
+		).toEqual([]);
+	});
+
+	it("come back in the order they were asked, as a new list", () => {
+		const asked = ["title", "id"];
+		const offered = fieldsFor([rule("allow")], mine, asked);
+
+		expect(offered).toEqual(["title", "id"]);
+		expect(offered).not.toBe(asked);
 	});
 });
 
-describe("validatePayload — fields", () => {
-	it("permits any field when no allow restricts fields", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-		];
-		expect(
-			validatePayload(rules, "update", "post", row, {
-				title: "new",
-				status: "published",
-			}),
-		).toEqual({ ok: true, data: { title: "new", status: "published" } });
+describe("a write refused as a whole", () => {
+	it.each([
+		["data that is null", [rule("allow")], mine, null],
+		["data that is an array", [rule("allow")], mine, ["x"]],
+		["data that is a string", [rule("allow")], mine, "x"],
+		[
+			"data that is a class instance",
+			[rule("allow")],
+			mine,
+			new (class Data {
+				id = "x";
+			})(),
+		],
+		["no permission", [], mine, { id: "x" }],
+		["a blanket prohibition", [rule("allow"), rule("deny")], mine, { id: "x" }],
+		[
+			"a row the permission does not hold for",
+			[rule("allow", { where: MINE })],
+			theirs,
+			{ id: "x" },
+		],
+		[
+			"no row for a permission that needs one",
+			[rule("allow", { where: MINE })],
+			undefined,
+			{ id: "x" },
+		],
+		[
+			"no row for a prohibition that needs one",
+			[rule("allow"), rule("deny", { where: MINE })],
+			undefined,
+			{ id: "x" },
+		],
+		[
+			"a row the permission cannot read",
+			[rule("allow", { where: BUSY })],
+			broken,
+			{ id: "x" },
+		],
+		["an empty write under no permission", [], mine, {}],
+	] as [
+		string,
+		Rule[],
+		Row | undefined,
+		unknown,
+	][])("for %s names no field", (_name, rules, row, data) => {
+		expect(write(rules, row, data)).toEqual({ ok: false, violations: [] });
 	});
+});
 
-	it("one unrestricted allow opens every field, whatever the narrow ones list", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-			{ effect: "allow", action: "update", resource: "post" },
-		];
-
+describe("a write refused field by field", () => {
+	it("names every field the rules do not permit", () => {
 		expect(
-			validatePayload(rules, "update", "post", row, { status: "published" }),
-		).toEqual({ ok: true, data: { status: "published" } });
-		expect(
-			permittedFields(rules, "update", "post", ["title", "status"]),
-		).toEqual(["title", "status"]);
-	});
-
-	it("rejects a field outside the allow set", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title", "status"] },
-			},
-		];
-		expect(
-			validatePayload(rules, "update", "post", row, { title: "new" }),
-		).toEqual({ ok: true, data: { title: "new" } });
-		expect(
-			validatePayload(rules, "update", "post", row, { featured: true }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "featured", reason: "field not permitted" }],
-		});
-	});
-
-	it("subtracts deny fields from the allow set", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title", "status"] },
-			},
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["status"] },
-			},
-		];
-		expect(
-			validatePayload(rules, "update", "post", row, { title: "new" }),
-		).toEqual({ ok: true, data: { title: "new" } });
-		expect(
-			validatePayload(rules, "update", "post", row, { status: "published" }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "status", reason: "field not permitted" }],
-		});
-	});
-
-	it("subtracts deny fields even when no allow restricts fields", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["featured"] },
-			},
-		];
-		expect(
-			validatePayload(rules, "update", "post", row, { featured: true }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "featured", reason: "field not permitted" }],
-		});
-		expect(
-			validatePayload(rules, "update", "post", row, { title: "ok" }),
-		).toEqual({ ok: true, data: { title: "ok" } });
-	});
-
-	it("collects a violation per offending field", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-		];
-		expect(
-			validatePayload(rules, "update", "post", row, {
-				status: "published",
-				featured: true,
+			write([rule("allow", { fields: ["title"] })], mine, {
+				title: "t",
+				id: "x",
+				authorId: "u2",
 			}),
 		).toEqual({
 			ok: false,
 			violations: [
-				{ field: "status", reason: "field not permitted" },
-				{ field: "featured", reason: "field not permitted" },
+				{ field: "id", reason: "field not permitted" },
+				{ field: "authorId", reason: "field not permitted" },
 			],
 		});
 	});
 
-	it("ignores rules whose where does not hold for the row", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				where: { field: "authorId", op: "eq", value: "u1" },
-				payload: { fields: ["title"] },
-			},
-		];
+	it("names a field a prohibition takes away", () => {
 		expect(
-			validatePayload(rules, "update", "post", row, { status: "published" }),
+			write([rule("allow"), rule("deny", { fields: ["authorId"] })], mine, {
+				authorId: "u2",
+			}),
 		).toEqual({
 			ok: false,
-			violations: [{ field: "status", reason: "field not permitted" }],
+			violations: [{ field: "authorId", reason: "field not permitted" }],
 		});
 	});
 
-	it("always permits an empty payload", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-		];
-		expect(validatePayload(rules, "update", "post", row, {})).toEqual({
-			ok: true,
-			data: {},
-		});
-	});
-
-	it("returns a copy of data on success, not the same reference", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-		];
-		const data = { title: "new" };
-		const result = validatePayload(rules, "update", "post", row, data);
-		expect(result).toEqual({ ok: true, data: { title: "new" } });
-		if (result.ok) {
-			expect(result.data).not.toBe(data);
-		}
-	});
-});
-
-describe("validatePayload — rule intersections & complex constraints", () => {
-	it("a constrained field is not freed by an allow that names other fields", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: {
-					fields: ["status"],
-					constraints: { field: "status", op: "in", value: ["draft"] },
-				},
-			},
-		];
-
+	it("names a field whose prohibition cannot read the row", () => {
 		expect(
-			validatePayload(rules, "update", "post", row, { status: "published" }),
+			write(
+				[rule("allow"), rule("deny", { where: BUSY, fields: ["title"] })],
+				broken,
+				{ title: "t", id: "x" },
+			),
+		).toEqual({
+			ok: false,
+			violations: [{ field: "title", reason: "field not permitted" }],
+		});
+	});
+
+	it("names a value no permission allows", () => {
+		expect(
+			write([rule("allow", { values: DRAFT })], mine, {
+				status: "archived",
+				id: "x",
+			}),
 		).toEqual({
 			ok: false,
 			violations: [{ field: "status", reason: "value not permitted" }],
 		});
-
-		expect(
-			validatePayload(rules, "update", "post", row, { status: "draft" }).ok,
-		).toBe(true);
 	});
 
-	it("a constraint whose field is not a string is unreadable, so it grants nothing", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: {
-					fields: ["status"],
-					constraints: {
-						field: 42,
-						op: "eq",
-						value: "published",
-					} as unknown as Rule<Post>["payload"] extends infer P
-						? P extends { constraints?: infer C }
-							? C
-							: never
-						: never,
-				},
-			},
-		];
-
+	it("names a value no permission can compare", () => {
 		expect(
-			validatePayload(rules, "update", "post", row, { status: "published" }).ok,
-		).toBe(false);
+			write([rule("allow", { values: DRAFT })], mine, { status: ["draft"] }),
+		).toEqual({
+			ok: false,
+			violations: [{ field: "status", reason: "value not permitted" }],
+		});
 	});
 
-	it("allows values when multiple rules permit different values for the same field (Logical OR across rules)", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: {
-					constraints: { field: "status", op: "eq", value: "published" },
-				},
-			},
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { constraints: { field: "status", op: "eq", value: "draft" } },
-			},
-		];
-
+	it("names a value a prohibition takes away", () => {
 		expect(
-			validatePayload(rules, "update", "post", row, { status: "published" }),
-		).toEqual({ ok: true, data: { status: "published" } });
-		expect(
-			validatePayload(rules, "update", "post", row, { status: "draft" }),
-		).toEqual({ ok: true, data: { status: "draft" } });
-
-		expect(
-			validatePayload(rules, "update", "post", row, {
+			write([rule("allow"), rule("deny", { values: ARCHIVED })], mine, {
 				status: "archived",
 			}),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "status", reason: "value not permitted" }],
-		});
-	});
-
-	it("strictly enforces ALL conditions within a single rule's 'and' constraint (Logical AND within rule)", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: {
-					constraints: {
-						and: [
-							{ field: "views", op: "gt", value: 5 },
-							{ field: "views", op: "lt", value: 10 },
-						],
-					},
-				},
-			},
-		];
-
-		expect(validatePayload(rules, "update", "post", row, { views: 7 })).toEqual(
-			{ ok: true, data: { views: 7 } },
-		);
-
-		expect(
-			validatePayload(rules, "update", "post", row, { views: 15 }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "views", reason: "value not permitted" }],
-		});
-	});
-
-	it("triggers deny only if all conditions for the field in a deny rule are met", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				payload: {
-					constraints: {
-						and: [
-							{ field: "views", op: "gt", value: 5 },
-							{ field: "views", op: "lt", value: 10 },
-						],
-					},
-				},
-			},
-		];
-
-		expect(validatePayload(rules, "update", "post", row, { views: 7 })).toEqual(
-			{
-				ok: false,
-				violations: [{ field: "views", reason: "value denied" }],
-			},
-		);
-
-		expect(
-			validatePayload(rules, "update", "post", row, { views: 15 }),
-		).toEqual({
-			ok: true,
-			data: { views: 15 },
-		});
-	});
-
-	it("unions allowed fields from multiple rules", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["status"] },
-			},
-		];
-
-		expect(
-			validatePayload(rules, "update", "post", row, {
-				title: "new",
-				status: "published",
-			}),
-		).toEqual({
-			ok: true,
-			data: { title: "new", status: "published" },
-		});
-
-		expect(
-			validatePayload(rules, "update", "post", row, { featured: true }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "featured", reason: "field not permitted" }],
-		});
-	});
-
-	it("applies value constraints even if rule does not restrict fields array", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: {
-					constraints: { field: "status", op: "eq", value: "published" },
-				},
-			},
-		];
-
-		expect(
-			validatePayload(rules, "update", "post", row, {
-				status: "published",
-				title: "any title",
-			}),
-		).toEqual({
-			ok: true,
-			data: { status: "published", title: "any title" },
-		});
-
-		expect(
-			validatePayload(rules, "update", "post", row, { status: "draft" }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "status", reason: "value not permitted" }],
-		});
-	});
-
-	it("ignores constraints of a rule if the field is excluded by the rule's fields array", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: {
-					fields: ["title"],
-					constraints: { field: "status", op: "eq", value: "published" },
-				},
-			},
-		];
-
-		expect(
-			validatePayload(rules, "update", "post", row, { status: "published" }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "status", reason: "field not permitted" }],
-		});
-	});
-
-	it("evaluates complex logical operators (or, not) in the rule's where condition", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				where: {
-					or: [
-						{ field: "authorId", op: "eq", value: "u1" },
-						{
-							and: [
-								{ field: "status", op: "eq", value: "published" },
-								{ not: { field: "views", op: "lt", value: 100 } },
-							],
-						},
-					],
-				},
-			},
-		];
-
-		expect(canMutate(rules, "update", "post", row)).toBe(true);
-
-		expect(
-			canMutate(rules, "update", "post", {
-				...row,
-				authorId: "u2",
-				status: "published",
-				views: 500,
-			}),
-		).toBe(true);
-
-		expect(
-			canMutate(rules, "update", "post", {
-				...row,
-				authorId: "u2",
-				status: "published",
-				views: 50,
-			}),
-		).toBe(false);
-	});
-
-	it("rejects or / not in payload constraints at compile time, and fails closed at runtime", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: {
-					constraints: {
-						// @ts-expect-error or is not allowed in payload.constraints (field / and only)
-						or: [
-							{ field: "status", op: "eq", value: "draft" },
-							{ field: "views", op: "gt", value: 100 },
-						],
-					},
-				},
-			},
-		];
-
-		expect(
-			validatePayload(rules, "update", "post", row, { status: "draft" }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "status", reason: "value not permitted" }],
-		});
-	});
-
-	it("fails closed in both directions on an unreadable constraint node", () => {
-		const unreadable = {
-			relation: "author",
-			type: "one",
-			where: { field: "id", op: "eq", value: "u1" },
-		} as never;
-
-		const allowRules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { constraints: unreadable },
-			},
-		];
-
-		expect(
-			validatePayload(allowRules, "update", "post", row, { status: "draft" }),
-		).toEqual({
-			ok: false,
-			violations: [{ field: "status", reason: "value not permitted" }],
-		});
-
-		const denyRules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				payload: { constraints: unreadable },
-			},
-		];
-
-		expect(
-			validatePayload(denyRules, "update", "post", row, { status: "draft" }),
 		).toEqual({
 			ok: false,
 			violations: [{ field: "status", reason: "value denied" }],
 		});
 	});
 
-	it("fails closed when the unreadable node is nested inside an and", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				payload: {
-					constraints: {
-						and: [
-							{ field: "status", op: "eq", value: "draft" },
-							{
-								relation: "author",
-								type: "one",
-								where: { field: "id", op: "eq", value: "u1" },
-							},
-						],
-					} as never,
-				},
-			},
-		];
-
+	it("names a value a prohibition cannot settle without a row as denied", () => {
 		expect(
-			validatePayload(rules, "update", "post", row, { title: "hello" }),
+			write(
+				[rule("allow"), rule("deny", { where: MINE, values: ARCHIVED })],
+				undefined,
+				{ status: "archived" },
+			),
 		).toEqual({
 			ok: false,
-			violations: [{ field: "title", reason: "value denied" }],
+			violations: [{ field: "status", reason: "value denied" }],
 		});
 	});
-});
 
-describe("validatePayload — row-level & blanket deny veto (V2)", () => {
-	it("vetoes the whole mutation when a row-level deny holds for the row", () => {
-		const locked: Post = { ...row, status: "published" };
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				where: { field: "status", op: "eq", value: "published" },
-			},
-		];
+	it("names the permission's refusal over a prohibition it could not settle", () => {
 		expect(
-			validatePayload(rules, "update", "post", locked, { title: "x" }),
-		).toEqual({ ok: false, violations: [] });
-	});
-
-	it("vetoes under an unconditional deny", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-			{ effect: "deny", action: "update", resource: "post" },
-		];
-		expect(
-			validatePayload(rules, "update", "post", row, { title: "x" }),
-		).toEqual({ ok: false, violations: [] });
-	});
-
-	it("does not veto when the row-level deny's where does not hold", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				where: { field: "status", op: "eq", value: "published" },
-			},
-		];
-		expect(
-			validatePayload(rules, "update", "post", row, { title: "x" }),
-		).toEqual({ ok: true, data: { title: "x" } });
-	});
-
-	it("keeps a field-level deny as field subtraction, not a global veto", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["featured"] },
-			},
-		];
-		expect(
-			validatePayload(rules, "update", "post", row, { title: "ok" }),
-		).toEqual({ ok: true, data: { title: "ok" } });
-	});
-});
-
-describe("validatePayload — invalid input (Zone 3 Fail-Closed)", () => {
-	const rules: Rule<Post>[] = [
-		{
-			effect: "allow",
-			action: "update",
-			resource: "post",
-			payload: { fields: ["title"] },
-		},
-	];
-
-	it("denies without throwing when the row is not a plain object", () => {
-		const call = () =>
-			validatePayload(rules, "update", "post", null, { title: "x" });
-		expect(call).not.toThrow();
-		expect(call()).toEqual({ ok: false, violations: [] });
-	});
-
-	it("denies when the data is not a plain object", () => {
-		expect(validatePayload(rules, "update", "post", row, null)).toEqual({
+			write(
+				[
+					rule("allow", { values: DRAFT }),
+					rule("deny", { where: MINE, values: ARCHIVED }),
+				],
+				undefined,
+				{ status: "archived" },
+			),
+		).toEqual({
 			ok: false,
-			violations: [],
+			violations: [{ field: "status", reason: "value not permitted" }],
 		});
 	});
-});
 
-describe("permittedFields", () => {
-	it("one unrestricted allow opens every field, whatever the narrow ones list", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-			{ effect: "allow", action: "update", resource: "post" },
-		];
-
-		expect(
-			permittedFields(rules, "update", "post", ["title", "status", "views"]),
-		).toEqual(["title", "status", "views"]);
-	});
-
-	it("returns explicitly allowed fields intersected with the universe", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title", "status"] },
-			},
-		];
-		expect(
-			permittedFields(rules, "update", "post", ["title", "status", "authorId"]),
-		).toEqual(["title", "status"]);
-	});
-
-	it("returns the whole universe when an allow grants all fields", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-		];
-		expect(
-			permittedFields(rules, "update", "post", ["title", "views"]),
-		).toEqual(["title", "views"]);
-	});
-
-	it("subtracts deny payload.fields", () => {
-		const rules: Rule<Post>[] = [
-			{ effect: "allow", action: "update", resource: "post" },
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["views"] },
-			},
-		];
-		expect(
-			permittedFields(rules, "update", "post", ["title", "views"]),
-		).toEqual(["title"]);
-	});
-
-	it("returns nothing when no allow matches the action", () => {
-		expect(permittedFields([], "update", "post", ["title"])).toEqual([]);
-	});
-
-	it("returns nothing under a blanket deny", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title"] },
-			},
-			{ effect: "deny", action: "update", resource: "post" },
-		];
-		expect(permittedFields(rules, "update", "post", ["title"])).toEqual([]);
-	});
-
-	it("does not treat a constraints-only deny as a blanket field deny", () => {
-		const rules: Rule<Post>[] = [
-			{
-				effect: "allow",
-				action: "update",
-				resource: "post",
-				payload: { fields: ["title", "status"] },
-			},
-			{
-				effect: "deny",
-				action: "update",
-				resource: "post",
-				payload: {
-					constraints: { field: "status", op: "eq", value: "archived" },
-				},
-			},
-		];
-		expect(
-			permittedFields(rules, "update", "post", ["title", "status", "featured"]),
-		).toEqual(["title", "status"]);
-	});
-});
-
-type Probe = {
-	op: ConditionOperator;
-	value: unknown;
-	match: unknown;
-	miss: unknown;
-};
-
-const probes: Probe[] = [
-	{ op: "eq", value: "published", match: "published", miss: "draft" },
-	{ op: "ne", value: "published", match: "draft", miss: "published" },
-	{ op: "in", value: ["a", "b"], match: "a", miss: "z" },
-	{ op: "nin", value: ["a", "b"], match: "z", miss: "a" },
-	{ op: "gt", value: 1000, match: 5000, miss: 10 },
-	{ op: "gte", value: 1000, match: 1000, miss: 10 },
-	{ op: "lt", value: 1000, match: 10, miss: 5000 },
-	{ op: "lte", value: 1000, match: 1000, miss: 5000 },
-	{ op: "contains", value: "secret", match: "top secret", miss: "public" },
-	{ op: "exists", value: true, match: "anything", miss: null },
-	{ op: "has", value: "x", match: ["x", "y"], miss: ["y"] },
-	{ op: "hasAny", value: ["x", "z"], match: ["x", "y"], miss: ["y"] },
-	{ op: "hasAll", value: ["x", "y"], match: ["x", "y", "z"], miss: ["x"] },
-];
-
-describe("validatePayload — every operator, over sound and broken values", () => {
-	const allowValue = (probe: Probe): Rule[] => [
-		{
-			effect: "allow",
-			action: "update",
-			resource: "post",
-			payload: {
-				fields: ["value"],
-				constraints: { field: "value", op: probe.op, value: probe.value },
-			},
-		},
-	];
-
-	const denyValue = (probe: Probe): Rule[] => [
-		{ effect: "allow", action: "update", resource: "post" },
-		{
-			effect: "deny",
-			action: "update",
-			resource: "post",
-			payload: {
-				constraints: { field: "value", op: probe.op, value: probe.value },
-			},
-		},
-	];
-
-	const write = (rules: Rule[], value: unknown) =>
-		validatePayload(rules, "update", "post", { id: "p" }, { value }).ok;
-
-	const wrappings = [
-		{ name: "array-wrapped", wrap: (value: unknown) => [value] },
-		{ name: "object-wrapped", wrap: (value: unknown) => ({ value }) },
-	];
-
-	it("covers every operator exactly once", () => {
-		expect(probes.map((probe) => probe.op).sort()).toEqual(
-			[...CONDITION_OPERATORS].sort(),
+	it("refuses a name every object inherits, whatever the rules say", () => {
+		const data = JSON.parse(
+			'{"__proto__": 1, "constructor": 2, "prototype": 3}',
 		);
+
+		expect(
+			write(
+				[rule("allow", { fields: ["constructor", "prototype"] as never })],
+				mine,
+				data,
+			),
+		).toEqual({
+			ok: false,
+			violations: [
+				{ field: "__proto__", reason: "field not permitted" },
+				{ field: "constructor", reason: "field not permitted" },
+				{ field: "prototype", reason: "field not permitted" },
+			],
+		});
+	});
+});
+
+describe("a write that passes", () => {
+	it("hands back a copy of exactly the keys that were sent", () => {
+		const data = { status: "draft", title: "t" };
+		const result = write([rule("allow", { values: DRAFT })], mine, data);
+
+		expect(result).toEqual({ ok: true, data });
+		expect(result.ok && result.data).not.toBe(data);
 	});
 
-	for (const probe of probes) {
-		it(`${probe.op}: permits the matching value and refuses the missing one`, () => {
-			expect(write(allowValue(probe), probe.match)).toBe(true);
-			expect(write(allowValue(probe), probe.miss)).toBe(false);
-			expect(write(denyValue(probe), probe.match)).toBe(false);
-			expect(write(denyValue(probe), probe.miss)).toBe(true);
+	it("passes an empty write the row gate lets through", () => {
+		expect(write([rule("allow")], undefined, {})).toEqual({
+			ok: true,
+			data: {},
+		});
+	});
+
+	it("reads the data's own keys, not what it inherits", () => {
+		const data = Object.assign(Object.create({ authorId: "u2" }), {
+			title: "t",
 		});
 
-		for (const { name, wrap } of wrappings) {
-			it(`${probe.op}: a ${name} value never slips past the gate`, () => {
-				expect(write(denyValue(probe), wrap(probe.match))).toBe(false);
-
-				if (probe.op !== "exists") {
-					expect(write(allowValue(probe), wrap(probe.match))).toBe(false);
-				}
-			});
-		}
-	}
+		expect(write([rule("allow", { fields: ["title"] })], mine, data)).toEqual({
+			ok: true,
+			data: { title: "t" },
+		});
+	});
 });

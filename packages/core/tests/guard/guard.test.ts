@@ -1,8 +1,6 @@
-import { describe, expect, expectTypeOf, it } from "vitest";
-import type { AbilitySet } from "../../src/api/ability.types.js";
-import { createRules } from "../../src/api/create-rules.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { shape } from "../../src/api/schema.js";
+import { assert, describe, expect, expectTypeOf, it } from "vitest";
+import type { Ability } from "../../src/api/index.js";
+import { createRules, defineAbilities, shape } from "../../src/create/index.js";
 import { ForbiddenError } from "../../src/errors/index.js";
 import { createGuard } from "../../src/guard/index.js";
 
@@ -95,6 +93,38 @@ describe("createGuard", () => {
 		await expect(getMissing()).rejects.toBeInstanceOf(ForbiddenError);
 	});
 
+	it("reports a load that is not a row as no row, before any rule is read", async () => {
+		const heard: unknown[] = [];
+		const withPermission = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => [allow("read", "post")],
+			onDecision: (decision) => heard.push(decision),
+		});
+
+		for (const value of ["p1", [{ id: "p1" }], new Date(0)]) {
+			const getOdd = withPermission(
+				{
+					action: "read",
+					resource: "post",
+					load: () => value as unknown as Post,
+				},
+				async () => "read",
+			);
+
+			await expect(getOdd()).rejects.toBeInstanceOf(ForbiddenError);
+		}
+
+		expect(heard).toEqual(
+			Array.from({ length: 3 }, () => ({
+				action: "read",
+				resource: "post",
+				allowed: false,
+				reason: "no row",
+			})),
+		);
+	});
+
 	it("denies when load resolves to something that is not a row", async () => {
 		const withPermission = createGuard({
 			ac,
@@ -121,8 +151,8 @@ describe("createGuard", () => {
 			ac,
 			getActor: () => actor,
 			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
-				deny("update", "post", { payload: { fields: ["authorId"] } }),
+				allow("update", { post: ["status"] }),
+				deny("update", { post: ["authorId"] }),
 			],
 		});
 		const updateNoLoad = withPermission(
@@ -146,9 +176,7 @@ describe("createGuard", () => {
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
-			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
-			],
+			policy: () => [allow("update", { post: ["status"] })],
 		});
 		const updatePost = withPermission(
 			{
@@ -172,9 +200,7 @@ describe("createGuard", () => {
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
-			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
-			],
+			policy: () => [allow("update", { post: ["status"] })],
 		});
 		const updatePost = withPermission(
 			{
@@ -194,12 +220,34 @@ describe("createGuard", () => {
 		).rejects.toBeInstanceOf(ForbiddenError);
 	});
 
+	it("refuses an action with no row and no payload when only a conditional allow covers it", async () => {
+		const denied: ForbiddenError[] = [];
+		const withPermission = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => [
+				allow("update", "post", { where: { authorId: { eq: "u1" } } }),
+			],
+			onDeny: (error) => {
+				denied.push(error);
+				throw error;
+			},
+		});
+		const updateAny = withPermission(
+			{ action: "update", resource: "post" },
+			async (_ctx, id: string) => id,
+		);
+
+		await expect(updateAny("p2")).rejects.toBeInstanceOf(ForbiddenError);
+		expect(denied).toHaveLength(1);
+	});
+
 	it("fails closed on a payload mutation without load when a conditional deny matches", async () => {
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
 			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
+				allow("update", { post: ["status"] }),
 				deny("update", "post", { where: { status: { eq: "published" } } }),
 			],
 		});
@@ -220,9 +268,7 @@ describe("createGuard", () => {
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
-			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
-			],
+			policy: () => [allow("update", { post: ["status"] })],
 		});
 		const createStyle = withPermission(
 			{
@@ -241,9 +287,7 @@ describe("createGuard", () => {
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
-			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
-			],
+			policy: () => [allow("update", { post: ["status"] })],
 		});
 		const updatePost = withPermission(
 			{
@@ -269,7 +313,7 @@ describe("createGuard", () => {
 			ac,
 			getActor: () => actor,
 			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
+				allow("update", { post: ["status"] }),
 				deny("update", "post"),
 			],
 		});
@@ -313,9 +357,7 @@ describe("createGuard", () => {
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
-			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
-			],
+			policy: () => [allow("update", { post: ["status"] })],
 		});
 		const updatePost = withPermission(
 			{
@@ -377,9 +419,7 @@ describe("createGuard", () => {
 		const withPermission = createGuard({
 			ac,
 			getActor: () => actor,
-			policy: () => [
-				allow("update", "post", { payload: { fields: ["status"] } }),
-			],
+			policy: () => [allow("update", { post: ["status"] })],
 		});
 
 		for (const payload of ["status=draft", 42, [{ status: "draft" }], true]) {
@@ -402,12 +442,13 @@ describe("createGuard", () => {
 			ac,
 			getActor: () => actor,
 			policy: () => [
-				allow("update", "post", {
-					payload: {
-						fields: ["status"],
-						constraints: { status: { eq: "draft" } },
+				allow(
+					"update",
+					{ post: ["status"] },
+					{
+						values: { status: { eq: "draft" } },
 					},
-				}),
+				),
 			],
 		});
 
@@ -447,6 +488,67 @@ describe("createGuard", () => {
 		await expect(getPost()).rejects.toBeInstanceOf(ForbiddenError);
 		expect(seen).toHaveLength(1);
 		expect(seen[0]?.action).toBe("read");
+	});
+
+	it("refuses the action when the decision hook throws", async () => {
+		const seen: ForbiddenError[] = [];
+		const ran: string[] = [];
+		const withPermission = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => [allow("read", "post")],
+			onDeny: (error) => {
+				seen.push(error);
+				throw error;
+			},
+			onDecision: () => {
+				throw new TypeError("the log is down");
+			},
+		});
+		const getPost = withPermission(
+			{ action: "read", resource: "post" },
+			async () => {
+				ran.push("handler");
+				return "ok";
+			},
+		);
+
+		await expect(getPost()).rejects.toBeInstanceOf(TypeError);
+		expect(ran).toEqual([]);
+		expect(seen).toEqual([]);
+	});
+
+	it("hands on what load throws, with no decision, no denial and no handler", async () => {
+		const failure = new Error("the database is down");
+		const heard: unknown[] = [];
+		const ran: string[] = [];
+		const withPermission = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => [allow("read", "post")],
+			onDeny: (error) => {
+				heard.push(error);
+				throw error;
+			},
+			onDecision: (decision) => heard.push(decision),
+		});
+		const getPost = withPermission(
+			{
+				action: "read",
+				resource: "post",
+				load: async () => {
+					throw failure;
+				},
+			},
+			async () => {
+				ran.push("handler");
+				return "ok";
+			},
+		);
+
+		await expect(getPost()).rejects.toBe(failure);
+		expect(heard).toEqual([]);
+		expect(ran).toEqual([]);
 	});
 
 	it("still denies when onDeny returns instead of throwing", async () => {
@@ -577,10 +679,13 @@ describe("attempts to smuggle data past the gate", () => {
 		ac,
 		getActor: () => actor,
 		policy: () => [
-			allow("update", "post", {
-				where: { authorId: "u1" },
-				payload: { fields: ["status"] },
-			}),
+			allow(
+				"update",
+				{ post: ["status"] },
+				{
+					where: { authorId: "u1" },
+				},
+			),
 		],
 	});
 
@@ -690,14 +795,11 @@ describe("shape validation is the caller's, and its errors stay its own", () => 
 	const guard = createGuard({
 		ac,
 		getActor: () => actor,
-		policy: () => [
-			allow("update", "post", { payload: { fields: ["status"] } }),
-		],
+		policy: () => [allow("update", { post: ["status"] })],
 	});
 	const row = { id: "p1", authorId: "u1", status: "draft" as const };
 
 	it("does not run the resource's schema — permissions are a different question", async () => {
-		// The value arrives past the types, the way JSON or a tool call does.
 		const fromTheWire = JSON.parse(
 			'{"status":"neither draft nor published"}',
 		) as {
@@ -885,7 +987,7 @@ describe("the guard reports the decisions it makes", () => {
 
 	it("reads the same list can() reads, whatever happens to the caller's array", async () => {
 		const policy = [allow("read", "post")];
-		const built: AbilitySet[] = [];
+		const built: Ability[] = [];
 
 		const guard = createGuard({
 			ac,
@@ -895,7 +997,7 @@ describe("the guard reports the decisions it makes", () => {
 		});
 
 		const read = guard({ action: "read", resource: "post" }, async (ctx) => {
-			built.push((ctx as { ability: AbilitySet }).ability);
+			built.push((ctx as { ability: Ability }).ability);
 
 			return "ok";
 		});
@@ -906,14 +1008,94 @@ describe("the guard reports the decisions it makes", () => {
 
 		const ability = built[0];
 
-		expect(ability).toBeDefined();
-
-		if (ability === undefined) {
-			return;
-		}
+		assert(ability !== undefined);
 
 		expect(ability.rules).toHaveLength(1);
 		expect(ability.can("read", "post")).toBe(true);
 		await expect(read()).rejects.toBeInstanceOf(ForbiddenError);
+	});
+});
+
+describe("options planted on the prototype", () => {
+	const plant = (key: string, value: unknown): (() => void) => {
+		(Object.prototype as Record<string, unknown>)[key] = value;
+
+		return () => {
+			delete (Object.prototype as Record<string, unknown>)[key];
+		};
+	};
+
+	it("load no row the action never asked for", async () => {
+		const withPermission = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => [
+				allow("update", "post", { where: { authorId: { eq: "u1" } } }),
+			],
+		});
+		const unplant = plant("load", () => ({
+			id: "p9",
+			authorId: "u1",
+			status: "draft",
+		}));
+
+		try {
+			const updateAny = withPermission(
+				{ action: "update", resource: "post" },
+				async () => "updated",
+			);
+
+			await expect(updateAny()).rejects.toBeInstanceOf(ForbiddenError);
+		} finally {
+			unplant();
+		}
+	});
+
+	it("hand the handler no payload the action never asked for", async () => {
+		const withPermission = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => [allow("read", "post")],
+		});
+		const unplant = plant("payload", () => ({ status: "published" }));
+
+		try {
+			const readPost = withPermission(
+				{ action: "read", resource: "post" },
+				async (ctx) => ctx.payload,
+			);
+
+			expect(await readPost()).toBeUndefined();
+		} finally {
+			unplant();
+		}
+	});
+
+	it("hear no refusal and no decision", async () => {
+		const heard: unknown[] = [];
+		const unplantDeny = plant("onDeny", (error: unknown) => heard.push(error));
+		const unplantDecision = plant("onDecision", (decision: unknown) =>
+			heard.push(decision),
+		);
+
+		try {
+			const withPermission = createGuard({
+				ac,
+				getActor: () => actor,
+				policy: () => [],
+			});
+
+			await expect(
+				withPermission(
+					{ action: "read", resource: "post" },
+					async () => "ok",
+				)(),
+			).rejects.toBeInstanceOf(ForbiddenError);
+		} finally {
+			unplantDeny();
+			unplantDecision();
+		}
+
+		expect(heard).toEqual([]);
 	});
 });

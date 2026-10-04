@@ -64,4 +64,4 @@ type ConditionNode<T> =
 
 ## Исходники
 
-[`evaluation/condition.ts`](../packages/core/src/evaluation/condition.ts) · [тесты](../packages/core/tests/evaluation/condition.test.ts) · тип: [`model/condition.ts`](../packages/core/src/model/condition.ts)
+[`compile/matcher.ts`](../packages/core/src/compile/matcher.ts) · [тесты](../packages/core/tests/compile/matcher.test.ts) · тип: [`model/condition.ts`](../packages/core/src/model/condition.ts)

@@ -129,7 +129,7 @@ const sendEmail = withPermission(
 
 `load` is where a tool's arguments become something a policy can judge, and it is worth deriving the field you actually mean. `recipientDomain` is a decision; the raw address is a string, and a rule written against the string with `contains` accepts `ceo@acme.com.evil.io` — it does contain `@acme.com`, while its domain is `evil.io`. The same shape of derivation covers the other effects: the write root for a file (so `../../etc/passwd` cannot pass as an upload), the host and method for a webhook, the currency and amount for a charge.
 
-**Give an effect tool a `load`, always.** Without a row the check is optimistic by contract — true when some `allow` could cover the action for *some* row — which is the wrong answer to give before something irreversible. Synthesizing the row is a few lines, and the guard then refuses before your handler exists.
+**Give an effect tool a `load`, always.** Without a row the guard grants only what no row could change: an `allow` with a `where` grants nothing, so a policy that judges the call by what it does refuses every call, legitimate ones included. Synthesizing the row is a few lines, and the guard then judges this call before your handler runs.
 
 **A limit that is state is just another field.** "No more than $500 a day" is not a property of the call, so look the running total up and put it in the row: `where: { spentTodayCents: { lte: 50000 } }` then reads the way the rule sounds. Nothing counts for you — veto answers about one decision, from the values you hand it.
 

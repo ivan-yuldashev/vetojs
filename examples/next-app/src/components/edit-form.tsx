@@ -20,7 +20,9 @@ const Form = ({ post }: { post: PostShape }) => {
 		authorId: post.authorId,
 	});
 
-	const writable = ability.permittedFields("update", "post", [...editable]);
+	const writable = ability.permittedFields("update", "post", post, [
+		...editable,
+	]);
 
 	const submitted = Object.fromEntries(
 		writable.map((field) => [field, draft[field as keyof typeof draft]]),

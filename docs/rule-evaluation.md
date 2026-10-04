@@ -50,11 +50,11 @@ A `deny` steps aside only when its condition is **decidably false** for this row
 ## Why it works this way
 
 - **Deny-override and default-deny are fixed, not configurable.** That is what lets the same rules compile to a SQL `WHERE` as a mechanical `OR(allows) AND NOT OR(denies)` — no solver, no normalisation, and the database returns exactly the rows `can()` would allow. Make the precedence configurable and that guarantee dies.
-- **`"manage"` matches every action**, as a bare value or inside a list, for allow and deny alike.
-- **This layer requires a row.** It answers "may the actor act on *this* row". The question "should the button be visible at all", which has no row yet, is answered by `can(action, resource)` without an instance — see [ability](./ability.md).
+- **`"manage"` matches every action**, as a bare value or inside a list, for allow and deny alike. A question never names it: one that does selects no rule and is refused.
+- **This layer requires a row.** It answers "may the actor act on *this* row". The question "should the button be visible at all", which has no row yet, is answered by `can(action, resource)` without a row — see [ability](./ability.md).
 - **Missing relation data throws instead of denying quietly.** A `where` that reaches into a relation you didn't load raises `RelationNotLoadedError` — a bug in your query, surfaced rather than silently changing the answer.
 - **Once an allow has matched, remaining allows are skipped.** Only denies can still change the outcome, so their conditions are the only ones left worth evaluating.
 
 ## Source
 
-[`evaluation/rule.ts`](../packages/core/src/evaluation/rule.ts) · [tests](../packages/core/tests/evaluation/rule.test.ts)
+[`check/rule.ts`](../packages/core/src/check/rule.ts) · [tests](../packages/core/tests/check/rule.test.ts)

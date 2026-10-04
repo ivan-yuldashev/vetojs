@@ -109,7 +109,7 @@ An action that doesn't exist, and a provider with two sources of rules, are comp
 </Can>;
 
 <AbilityProvider rules={rules} ability={ability}>
-//                             ^^^^^^^ ✗ Type 'AbilitySet<…>' is not assignable to type 'undefined'
+//                             ^^^^^^^ ✗ Type 'Ability<…>' is not assignable to type 'undefined'
 	<EditButton />
 </AbilityProvider>;
 ```

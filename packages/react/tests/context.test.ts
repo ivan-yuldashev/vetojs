@@ -1,4 +1,4 @@
-import { type AbilitySet, defineAbilities, shape } from "@vetojs/core";
+import { type Ability, defineAbilities, shape } from "@vetojs/core";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createVetoContext } from "../src/context.js";
 
@@ -19,9 +19,9 @@ describe("createVetoContext", () => {
 		expect(typeof context.Can).toBe("function");
 	});
 
-	it("types useAbility as AbilitySet of the given AC", () => {
+	it("types useAbility as Ability of the given AC", () => {
 		const { useAbility } = createVetoContext(ac);
-		expectTypeOf(useAbility).returns.toEqualTypeOf<AbilitySet<typeof ac>>();
+		expectTypeOf(useAbility).returns.toEqualTypeOf<Ability<typeof ac>>();
 	});
 
 	it("narrows Can props per resource", () => {

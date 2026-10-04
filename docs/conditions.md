@@ -64,4 +64,4 @@ The single exception is a **relation the rule needs but you never loaded** — t
 
 ## Source
 
-[`evaluation/condition.ts`](../packages/core/src/evaluation/condition.ts) · [tests](../packages/core/tests/evaluation/condition.test.ts) · type: [`model/condition.ts`](../packages/core/src/model/condition.ts)
+[`compile/matcher.ts`](../packages/core/src/compile/matcher.ts) · [tests](../packages/core/tests/compile/matcher.test.ts) · type: [`model/condition.ts`](../packages/core/src/model/condition.ts)

@@ -45,16 +45,17 @@ const perTenant = (who: Actor): CheckedRules => {
 				allow("read", "post", {
 					where: { blog: { workspace: { id: workspaceId } } },
 				}),
-				allow(["update", "publish"], "post", {
-					where: {
-						authorId: who.id,
-						blog: { workspace: { id: workspaceId } },
+				allow(
+					["update", "publish"],
+					{ post: ["title", "status"] },
+					{
+						where: {
+							authorId: who.id,
+							blog: { workspace: { id: workspaceId } },
+						},
+						values: { status: { in: ["draft"] } },
 					},
-					payload: {
-						fields: ["title", "status"],
-						constraints: { status: { in: ["draft"] } },
-					},
-				}),
+				),
 			);
 		}
 
@@ -93,6 +94,7 @@ const post = markLoaded(
 		title: "probe",
 		status: "published" as const,
 		views: 10,
+		slug: "probe",
 	},
 	"blog",
 	blog,

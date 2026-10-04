@@ -20,6 +20,7 @@ export const postSchema = z.object({
 	status: z.enum(["draft", "published"]),
 	title: z.string().min(3, "a title needs at least 3 characters"),
 	views: z.number(),
+	slug: z.string(),
 });
 
 export type Post = z.infer<typeof postSchema>;

@@ -1,273 +1,183 @@
+import { type CheckResult, checkRow } from "../check/index.js";
+import { createSelect, type Select, whereOf } from "../compile/index.js";
+import type { ResourceMap, ValidateResult } from "../create/index.js";
+import { validateSchema } from "../create/index.js";
 import { ForbiddenError } from "../errors/index.js";
-import {
-	evaluateRules,
-	matcherFor,
-	mightAllow,
-	type Prepared,
-	prohibitsRow,
-	type Reach,
-	reachesOf,
-	ruleMatches,
-	type Settled,
-	walkReaches,
-} from "../evaluation/index.js";
-import type { ConditionNode } from "../model/index.js";
-import {
-	isPlainObject,
-	MANAGE_ACTION,
-	own,
-	type Row,
-} from "../shared/index.js";
-import type {
-	AbilityOptions,
-	AbilitySet,
-	DecisionReport,
-} from "./ability.types.js";
-import type { CheckedRule, CheckedRules } from "./checked-rules.types.js";
-import type { ResourceMap } from "./define-abilities.js";
-import { canMutate, permittedFields, validatePayload } from "./mutation.js";
+import type { CheckedRule, ConditionNode, Row, Rule } from "../model/index.js";
+import { isRow, own } from "../shared/index.js";
+import type { Ability, AbilityOptions, Decision } from "./ability.types.js";
+import { permittedFields, validatePayload } from "./mutation.js";
 import type { PayloadResult } from "./mutation.types.js";
-import { validateSchema } from "./schema.js";
-import type { ValidateResult } from "./schema.types.js";
-import { compileWhere } from "./where.js";
 
-export type { AbilitySet } from "./ability.types.js";
+const ruleOf = (
+	result: CheckResult,
+	allowed: boolean,
+	hasRow: boolean,
+): Rule | undefined => {
+	if (allowed) {
+		return result.allowRule;
+	}
 
-type Narrowed = Prepared & { rules: CheckedRules; reaches: Reach[] };
-
-const NOTHING: Narrowed = {
-	rules: [],
-	grantIsFinal: true,
-	reaches: [],
-	matchers: [],
+	return result.verdict === false || hasRow ? result.denyRule : undefined;
 };
 
-/**
- * Turns a policy into the object you call.
- *
- * Accepts only rules that provably passed a check — from {@link createRules} (verified by
- * the compiler) or {@link parseRules} with a vocabulary (verified at runtime), so the
- * validation step for rules arriving from a database or the network cannot be skipped.
- *
- * The policy is read once, here. Changing the array or the rule objects afterwards does not
- * change the answers — build again for a policy that changed.
- *
- * @param registry - your {@link defineAbilities} declarations
- * @param rules - the policy for one actor
- *
- * @example
- * const ability = buildAbility(ac, policyFor(user));
- * ability.can("update", "post", post);
- */
-export const buildAbility = <AC extends ResourceMap = ResourceMap>(
-	registry: AC,
+const decisionOf = (
+	action: string,
+	resource: string,
+	result: CheckResult,
+	allowed: boolean,
+	hasRow: boolean,
+): Decision => {
+	const decision: Decision = { action, resource, allowed };
+	const rule = ruleOf(result, allowed, hasRow);
+
+	if (rule !== undefined) {
+		decision.rule = rule;
+	}
+
+	if (result.reason !== undefined) {
+		decision.reason = result.reason;
+	}
+
+	return decision;
+};
+
+const payloadDecisionOf = (
+	action: string,
+	resource: string,
+	row: Row | undefined,
+	result: PayloadResult<Row>,
+): Decision => {
+	if (result.ok) {
+		return { action, resource, allowed: true };
+	}
+
+	const decision: Decision = {
+		action,
+		resource,
+		allowed: false,
+		violations: result.violations,
+	};
+
+	if (row !== undefined && !isRow(row)) {
+		decision.reason = "not a plain row";
+	}
+
+	return decision;
+};
+
+const abilityOf = (
+	ac: ResourceMap,
 	rules: readonly CheckedRule[],
-	options?: AbilityOptions,
-): AbilitySet<AC> => {
-	const report = options?.onDecision;
-
-	const policy = [...rules];
-	const buckets = new Map<string, Map<string, Narrowed>>();
-
-	const declared = (action: string, resource: string): boolean => {
-		const definition = own(registry, resource);
-
-		if (definition === undefined) {
-			return false;
-		}
-
-		return action === MANAGE_ACTION || definition.actions.includes(action);
-	};
-
-	const relevant = (action: string, resource: string): Narrowed => {
-		const byAction = buckets.get(resource);
-		const known = byAction?.get(action);
-
-		if (known !== undefined) {
-			return known;
-		}
-
-		const only = policy.filter((rule) => ruleMatches(rule, action, resource));
-
-		const narrowed: Narrowed =
-			only.length === 0
-				? NOTHING
-				: {
-						rules: only,
-						grantIsFinal: !only.some(prohibitsRow),
-						reaches: reachesOf(
-							only.flatMap((rule) =>
-								rule.where === undefined ? [] : [rule.where],
-							),
-						),
-						matchers: only.map((rule) =>
-							rule.where === undefined ? undefined : matcherFor(rule.where),
-						),
-					};
-
-		if (!declared(action, resource)) {
-			return narrowed;
-		}
-
-		if (byAction === undefined) {
-			buckets.set(resource, new Map([[action, narrowed]]));
-		} else {
-			byAction.set(action, narrowed);
-		}
-
-		return narrowed;
-	};
-
-	const sound = (only: Narrowed, instance: unknown): void => {
-		if (only.reaches.length > 0 && isPlainObject<Row>(instance)) {
-			walkReaches(only.reaches, instance);
-		}
-	};
-
-	const unreadable = (instance: unknown): boolean => {
-		return instance !== undefined && !isPlainObject(instance);
-	};
-
-	const answer = (
+	onDecision: AbilityOptions["onDecision"],
+	select: Select,
+): Ability => {
+	const decide = (
 		action: string,
 		resource: string,
-		allowed: boolean,
-		settled: Settled<Row>,
-		instance?: unknown,
+		row: Row | undefined,
+		isOptimistic: boolean,
 	): boolean => {
-		const decision: DecisionReport = { action, resource, allowed };
+		const result = checkRow(
+			select(action, resource),
+			row,
+			onDecision !== undefined,
+		);
 
-		if (settled.rule !== undefined) {
-			decision.rule = settled.rule;
-		}
+		const allowed = result.verdict ?? isOptimistic;
 
-		if (unreadable(instance)) {
-			decision.reason = "not a plain row";
-		}
-
-		report?.(decision);
+		onDecision?.(
+			decisionOf(action, resource, result, allowed, row !== undefined),
+		);
 
 		return allowed;
 	};
 
-	const decide = (
-		action: string,
-		resource: string,
-		instance?: unknown,
-	): boolean => {
-		const only = relevant(action, resource);
-
-		sound(only, instance);
-
-		if (report === undefined) {
-			return instance === undefined
-				? mightAllow(only.rules, action, resource)
-				: evaluateRules(
-						only.rules,
-						action,
-						resource,
-						instance,
-						undefined,
-						only,
-					);
-		}
-
-		const settled: Settled<Row> = {};
-
-		return answer(
-			action,
-			resource,
-			instance === undefined
-				? mightAllow(only.rules, action, resource, settled)
-				: evaluateRules(only.rules, action, resource, instance, settled, only),
-			settled,
-			instance,
-		);
+	const can = (action: string, resource: string, row?: Row): boolean => {
+		return decide(action, resource, row, row === undefined);
 	};
 
-	const core = {
-		rules: Object.freeze(policy),
-		can: decide,
-		cannot: (action: string, resource: string, instance?: unknown): boolean => {
-			return !decide(action, resource, instance);
+	const ability = {
+		rules,
+		can,
+		cannot: (action: string, resource: string, row?: Row): boolean => {
+			return !can(action, resource, row);
 		},
-		authorize: (action: string, resource: string, instance?: unknown): void => {
-			if (!decide(action, resource, instance)) {
+		authorize: (action: string, resource: string, row?: Row): void => {
+			if (!decide(action, resource, row, false)) {
 				throw new ForbiddenError(action, resource);
 			}
 		},
-		canMutate: (action: string, resource: string, row: unknown): boolean => {
-			const only = relevant(action, resource);
-
-			sound(only, row);
-
-			if (report === undefined) {
-				return canMutate(only.rules, action, resource, row);
-			}
-
-			const settled: Settled<Row> = {};
-
-			return answer(
-				action,
-				resource,
-				canMutate(only.rules, action, resource, row, settled),
-				settled,
-				row,
-			);
+		canMutate: (action: string, resource: string, row?: Row): boolean => {
+			return decide(action, resource, row, false);
 		},
 		validatePayload: (
 			action: string,
 			resource: string,
-			row: unknown,
+			row: Row | undefined,
 			data: unknown,
 		): PayloadResult<Row> => {
-			const result = validatePayload(
-				relevant(action, resource).rules,
-				action,
-				resource,
-				row,
-				data,
-			);
+			const result = validatePayload(select(action, resource), row, data);
 
-			report?.(
-				result.ok
-					? { action, resource, allowed: true }
-					: {
-							action,
-							resource,
-							allowed: false,
-							violations: result.violations,
-						},
-			);
+			onDecision?.(payloadDecisionOf(action, resource, row, result));
 
 			return result;
-		},
-		where: (action: string, resource: string): ConditionNode<Row> => {
-			return compileWhere(relevant(action, resource).rules, action, resource);
 		},
 		permittedFields: (
 			action: string,
 			resource: string,
+			row: Row | undefined,
 			fields: string[],
 		): string[] => {
-			return permittedFields(
-				relevant(action, resource).rules,
-				action,
-				resource,
-				fields,
-			);
+			return permittedFields(select(action, resource), row, fields);
+		},
+		where: (action: string, resource: string): ConditionNode<Row> => {
+			return whereOf(select(action, resource));
 		},
 		validate: (resource: string, data: unknown): ValidateResult<Row> => {
-			const definition = own(registry, resource);
+			const definition = own(ac, resource);
 
 			return definition === undefined
 				? {
 						ok: false,
 						issues: [{ message: `unknown resource "${resource}"` }],
 					}
-				: validateSchema(definition.schema, data);
+				: validateSchema(own(definition, "schema"), data);
 		},
 	};
 
-	return core as AbilitySet<AC>;
+	return ability as Ability;
+};
+
+/**
+ * Turns a policy into the object you call.
+ *
+ * Accepts only rules that provably passed a check — from {@link createRules} (verified by
+ * the compiler) or {@link parseRules} (verified at runtime), so the validation step for
+ * rules arriving from a database or the network cannot be skipped.
+ *
+ * The list is read once, here: adding to or removing from the array afterwards changes
+ * nothing. The rule objects stay yours, so build again for a policy that changed rather
+ * than editing one in place.
+ *
+ * @param ac - your {@link defineAbilities} declarations
+ * @param policy - the rules for one actor
+ *
+ * @example
+ * const ability = buildAbility(ac, policyFor(user));
+ * ability.can("update", "post", post);
+ */
+export const buildAbility = <AC extends ResourceMap = ResourceMap>(
+	ac: AC,
+	policy: readonly CheckedRule[],
+	options?: AbilityOptions,
+): Ability<AC> => {
+	const rules = [...policy];
+
+	return abilityOf(
+		ac,
+		rules,
+		options === undefined ? undefined : own(options, "onDecision"),
+		createSelect(rules),
+	);
 };

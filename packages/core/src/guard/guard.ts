@@ -1,46 +1,14 @@
-import type { AbilitySet, ResourceMap } from "../api/index.js";
+import type { Ability, Decision } from "../api/index.js";
 import { buildAbility } from "../api/index.js";
+import type { ResourceMap } from "../create/index.js";
 import { ForbiddenError } from "../errors/index.js";
-import { ruleMatches } from "../evaluation/index.js";
-import type { Rule } from "../model/index.js";
-import {
-	isPayloadScoped,
-	isPlainObject,
-	type Row,
-	RuleEffect,
-} from "../shared/index.js";
+import type { Row } from "../model/index.js";
+import { isRow, own } from "../shared/index.js";
 import type {
 	GuardConfig,
 	GuardOptions,
 	WithPermission,
 } from "./guard.types.js";
-
-const hasMatchingDeny = (
-	rules: readonly Rule[],
-	action: string,
-	resource: string,
-): boolean => {
-	return rules.some(
-		(rule) =>
-			rule.effect === RuleEffect.Deny &&
-			ruleMatches(rule, action, resource) &&
-			!isPayloadScoped(rule),
-	);
-};
-
-const mutationRowAllowed = (
-	ability: AbilitySet,
-	action: string,
-	resource: string,
-	row: Row | undefined,
-	base: Row,
-): boolean => {
-	if (row === undefined) {
-		return !hasMatchingDeny(ability.rules, action, resource);
-	}
-
-	return ability.canMutate(action, resource, base);
-};
 
 /**
  * Configures the guard once: how to find the actor, and which policy to build for them.
@@ -56,25 +24,27 @@ const mutationRowAllowed = (
 export const createGuard = <AC extends ResourceMap, Actor>(
 	config: GuardConfig<AC, Actor>,
 ): WithPermission<AC, Actor> => {
+	const onDeny = own(config, "onDeny");
+	const onUnauthenticated = own(config, "onUnauthenticated");
+	const watch = own(config, "onDecision");
+
 	const deny = (error: ForbiddenError): never => {
-		config.onDeny?.(error);
+		onDeny?.(error);
 		throw error;
 	};
 
 	const authorizeMutation = (
-		ability: AbilitySet,
+		ability: Ability,
 		action: string,
 		resource: string,
 		row: Row | undefined,
 		payload: Row,
 	): Row => {
-		const base = row ?? {};
-
-		if (!mutationRowAllowed(ability, action, resource, row, base)) {
+		if (!ability.canMutate(action, resource, row)) {
 			deny(new ForbiddenError(action, resource));
 		}
 
-		const result = ability.validatePayload(action, resource, base, payload);
+		const result = ability.validatePayload(action, resource, row, payload);
 
 		if (result.ok) {
 			return result.data;
@@ -84,7 +54,7 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 	};
 
 	const authorize = (
-		ability: AbilitySet,
+		ability: Ability,
 		action: string,
 		resource: string,
 		row: Row | undefined,
@@ -94,12 +64,14 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 			return authorizeMutation(ability, action, resource, row, payload);
 		}
 
-		if (row !== undefined && !ability.can(action, resource, row)) {
-			deny(new ForbiddenError(action, resource));
-		}
+		try {
+			ability.authorize(action, resource, row);
+		} catch (error) {
+			if (ForbiddenError.is(error)) {
+				deny(error);
+			}
 
-		if (row === undefined && ability.cannot(action, resource)) {
-			deny(new ForbiddenError(action, resource));
+			throw error;
 		}
 
 		return undefined;
@@ -109,56 +81,64 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 		options: GuardOptions,
 		handler: (ctx: unknown, ...args: unknown[]) => unknown,
 	) => {
-		const guarded = async (...args: unknown[]): Promise<unknown> => {
-			const { action, resource } = options;
+		const load = own(options, "load");
+		const payloadOf = own(options, "payload");
 
+		const guarded = async (...args: unknown[]): Promise<unknown> => {
 			const actor = await config.getActor();
 
 			if (actor === null || actor === undefined) {
-				config.onUnauthenticated?.({ action, resource });
+				onUnauthenticated?.({
+					action: options.action,
+					resource: options.resource,
+				});
 
-				return deny(new ForbiddenError(action, resource));
+				return deny(new ForbiddenError(options.action, options.resource));
 			}
 
-			const watch = config.onDecision;
-			const typedAbility = buildAbility(
+			const report =
+				watch === undefined
+					? undefined
+					: (decision: Decision) => watch(decision, actor);
+
+			const ability = buildAbility(
 				config.ac,
 				config.policy(actor),
-				watch === undefined
-					? {}
-					: { onDecision: (decision) => watch(decision, actor) },
+				report === undefined ? {} : { onDecision: report },
 			);
 
 			let row: Row | undefined;
 
-			if (options.load) {
-				const loaded = await options.load(...args);
+			if (load !== undefined) {
+				const loaded = await load(...args);
 
-				if (!isPlainObject<Row>(loaded)) {
-					watch?.(
-						{ action, resource, allowed: false, reason: "no row" },
-						actor,
-					);
+				if (!isRow(loaded)) {
+					report?.({
+						action: options.action,
+						resource: options.resource,
+						allowed: false,
+						reason: "no row",
+					});
 
-					return deny(new ForbiddenError(action, resource));
+					return deny(new ForbiddenError(options.action, options.resource));
 				}
 
 				row = loaded;
 			}
 
-			const payload = options.payload ? options.payload(...args) : undefined;
+			const payload = payloadOf === undefined ? undefined : payloadOf(...args);
 
 			const validatedPayload = authorize(
-				typedAbility,
-				action,
-				resource,
+				ability,
+				options.action,
+				options.resource,
 				row,
 				payload,
 			);
 
 			const ctx = {
 				actor,
-				ability: typedAbility,
+				ability: ability,
 				row,
 				payload: validatedPayload,
 			};

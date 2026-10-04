@@ -2,9 +2,9 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type {
 	ConditionNode,
 	FieldConditionNode,
-} from "../../src/model/condition.js";
-import type { Rule, RulePayload } from "../../src/model/rule.js";
-import type { RuleEffect } from "../../src/shared/index.js";
+	Rule,
+	RuleEffect,
+} from "../../src/model/index.js";
 
 type Post = {
 	authorId: string;
@@ -23,14 +23,26 @@ describe("Rule (types)", () => {
 		>();
 	});
 
-	it("payload.fields are keys of the resource", () => {
-		expectTypeOf<NonNullable<RulePayload<Post>["fields"]>>().toEqualTypeOf<
-			(keyof Post)[]
+	it("names at least one action", () => {
+		expectTypeOf<Rule<Post>["action"]>().toEqualTypeOf<
+			string | [string, ...string[]]
 		>();
 	});
 
-	it("payload.constraints is a ConditionNode over a partial resource", () => {
-		expectTypeOf<RulePayload<Post>["constraints"]>().toEqualTypeOf<
+	it("fields are at least one key of the resource", () => {
+		expectTypeOf<NonNullable<Rule<Post>["fields"]>>().toEqualTypeOf<
+			readonly [keyof Post, ...(keyof Post)[]]
+		>();
+	});
+
+	it("fields never name an empty key, even one the shape has", () => {
+		expectTypeOf<
+			NonNullable<Rule<{ "": string; title: string }>["fields"]>
+		>().toEqualTypeOf<readonly ["title", ..."title"[]]>();
+	});
+
+	it("values are a field condition over a partial resource", () => {
+		expectTypeOf<Rule<Post>["values"]>().toEqualTypeOf<
 			FieldConditionNode<Partial<Post>> | undefined
 		>();
 	});
@@ -45,13 +57,11 @@ describe("Rule (types)", () => {
 			action: ["update", "publish"],
 			resource: "post",
 			where: { field: "authorId", op: "eq", value: "u1" },
-			payload: {
-				fields: ["title", "status"],
-				constraints: {
-					field: "status",
-					op: "in",
-					value: ["draft", "published"],
-				},
+			fields: ["title", "status"],
+			values: {
+				field: "status",
+				op: "in",
+				value: ["draft", "published"],
 			},
 		};
 		expectTypeOf(rule).toEqualTypeOf<Rule<Post>>();
@@ -62,11 +72,9 @@ describe("Rule (types)", () => {
 			effect: "allow",
 			action: "update",
 			resource: "post",
-			payload: {
-				constraints: {
-					// @ts-expect-error or is not allowed in FieldConditionNode (field / and only)
-					or: [{ field: "status", op: "eq", value: "draft" }],
-				},
+			values: {
+				// @ts-expect-error or is not allowed in FieldConditionNode (field / and only)
+				or: [{ field: "status", op: "eq", value: "draft" }],
 			},
 		};
 
@@ -74,11 +82,9 @@ describe("Rule (types)", () => {
 			effect: "allow",
 			action: "update",
 			resource: "post",
-			payload: {
-				constraints: {
-					// @ts-expect-error not is not allowed in FieldConditionNode (field / and only)
-					not: { field: "status", op: "eq", value: "draft" },
-				},
+			values: {
+				// @ts-expect-error not is not allowed in FieldConditionNode (field / and only)
+				not: { field: "status", op: "eq", value: "draft" },
 			},
 		};
 
@@ -91,14 +97,12 @@ describe("Rule (types)", () => {
 			effect: "allow",
 			action: "update",
 			resource: "post",
-			payload: {
-				constraints: {
-					// @ts-expect-error relation is not allowed in FieldConditionNode (field / and only)
-					relation: "comments",
-					type: "many",
-					match: "some",
-					where: { field: "approved", op: "eq", value: true },
-				},
+			values: {
+				// @ts-expect-error relation is not allowed in FieldConditionNode (field / and only)
+				relation: "comments",
+				type: "many",
+				match: "some",
+				where: { field: "approved", op: "eq", value: true },
 			},
 		};
 

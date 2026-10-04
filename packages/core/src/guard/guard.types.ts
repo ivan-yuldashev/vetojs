@@ -1,15 +1,14 @@
+import type { Ability, Decision } from "../api/index.js";
 import type {
-	AbilitySet,
-	ActionFor,
-	CheckedRules,
-	DecisionReport,
+	DeclaredAction,
 	ResourceMap,
 	ResourceName,
 	ShapeOf,
-} from "../api/index.js";
+} from "../create/index.js";
 import type { ForbiddenError } from "../errors/index.js";
+import type { CheckedRules } from "../model/index.js";
 
-export type Awaitable<T> = T | Promise<T>;
+type Awaitable<T> = T | Promise<T>;
 
 export type GuardOptions = {
 	action: string;
@@ -61,12 +60,16 @@ export type GuardConfig<AC extends ResourceMap, Actor> = {
 
 	/**
 	 * Called after every access decision the guarded action makes, with what was asked,
-	 * what was answered and the rule that settled it — see {@link DecisionReport}.
+	 * what was answered and the rule that settled it — see {@link Decision}.
 	 *
 	 * The actor comes second because this hook is configured once while the actor is
 	 * resolved per call, so a closure could not have it.
+	 *
+	 * A hook that throws refuses the guarded action: the exception reaches your caller
+	 * instead of the handler, and it is not a {@link ForbiddenError}, so `onDeny` does
+	 * not run. Catch inside the hook when telemetry must not block an action.
 	 */
-	onDecision?: (decision: DecisionReport, actor: Actor) => void;
+	onDecision?: (decision: Decision, actor: Actor) => void;
 };
 
 /**
@@ -81,7 +84,7 @@ export type ActionOptions<
 	R extends ResourceName<AC>,
 	Args extends unknown[],
 > = {
-	action: ActionFor<AC, R>;
+	action: DeclaredAction<AC, R>;
 	resource: R;
 
 	/**
@@ -111,7 +114,7 @@ export type GuardContext<
 	O = ActionOptions<AC, R, never[]>,
 > = {
 	actor: Actor;
-	ability: AbilitySet<AC>;
+	ability: Ability<AC>;
 	row: O extends { load: Provided }
 		? ShapeOf<AC, R>
 		: ShapeOf<AC, R> | undefined;

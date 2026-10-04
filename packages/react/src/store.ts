@@ -1,13 +1,13 @@
-import type { AbilitySet, ResourceMap } from "@vetojs/core";
+import type { Ability, ResourceMap } from "@vetojs/core";
 
 export type AbilityStore<AC extends ResourceMap> = {
-	get: () => AbilitySet<AC>;
-	publish: (next: AbilitySet<AC>) => void;
+	get: () => Ability<AC>;
+	publish: (next: Ability<AC>) => void;
 	subscribe: (listener: VoidFunction) => VoidFunction;
 };
 
 export const createAbilityStore = <AC extends ResourceMap>(
-	initial: AbilitySet<AC>,
+	initial: Ability<AC>,
 ): AbilityStore<AC> => {
 	let current = initial;
 	const listeners = new Set<VoidFunction>();

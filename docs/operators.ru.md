@@ -44,7 +44,7 @@ allow("read", "post", { where: { status: { in: ["draft", "review"] } } });
 | `views > "abc"` — число против строки | **неизвестно** | между ними нет осмысленного порядка |
 | `NaN` или некорректная `Date` | **неизвестно** | по нему нечего упорядочивать, сравнение ничего не решает |
 | `status in "draft"` — список не список | **неизвестно** | правило сломано; см. ниже |
-| Оператор, которого движок не знает | **нет** | сломанные правила запрещают, а не роняют приложение |
+| Оператор, которого движок не знает | **неизвестно** | сломанное правило ничего не разрешает, а его `deny` срабатывает; приложение не падает |
 
 ### Подробности про порядок
 
@@ -65,6 +65,6 @@ allow("read", "post", { where: { status: { in: ["draft", "review"] } } });
 
 ## Исходники
 
-[`evaluation/operator.ts`](../packages/core/src/evaluation/operator.ts) · [тесты](../packages/core/tests/evaluation/operator.test.ts)
+[`verdict/operator.ts`](../packages/core/src/verdict/operator.ts) · [тесты](../packages/core/tests/verdict/operator.test.ts)
 
 `ConditionOperator` экспортируется из `@vetojs/core` для адаптеров баз данных; сам вычислитель внутренний — вы обращаетесь к нему через `ability.can(...)`.

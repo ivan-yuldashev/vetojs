@@ -1,7 +1,7 @@
 import type {
-	AbilitySet,
-	ActionFor,
+	Ability,
 	ConditionNode,
+	DeclaredAction,
 	ResourceMap,
 	ResourceName,
 	ShapeOf,
@@ -82,8 +82,8 @@ export type DrizzleSchema<AC extends ResourceMap> = {
 			...narrow: SQLWrapper[]
 		): SQL;
 		<R extends ResourceName<AC>>(
-			ability: AbilitySet<AC>,
-			action: ActionFor<AC, R>,
+			ability: Ability<AC>,
+			action: DeclaredAction<AC, R>,
 			resource: R,
 			...narrow: SQLWrapper[]
 		): SQL;

@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildAbility } from "../src/api/ability.js";
-import { createRules } from "../src/api/create-rules.js";
-import { defineAbilities } from "../src/api/define-abilities.js";
-import { shape } from "../src/api/schema.js";
+import { buildAbility } from "../src/api/index.js";
+import { createRules, defineAbilities, shape } from "../src/create/index.js";
 
 type Post = {
 	id: string;

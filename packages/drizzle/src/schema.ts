@@ -1,5 +1,5 @@
 import type {
-	AbilitySet,
+	Ability,
 	ConditionNode,
 	RelationKind,
 	ResourceMap,
@@ -31,7 +31,7 @@ type FilterArgs<AC extends ResourceMap> =
 			...narrow: SQLWrapper[],
 	  ]
 	| [
-			ability: AbilitySet<AC>,
+			ability: Ability<AC>,
 			action: string,
 			resource: string,
 			...narrow: SQLWrapper[],
@@ -77,9 +77,11 @@ const resolveJoins = (
 		const declaredJoins = own(joins, resource);
 		const parent = own(tables, resource);
 
-		for (const [relationName, relation] of Object.entries(
-			definition.relations ?? {},
-		)) {
+		const relations = Object.hasOwn(definition, "relations")
+			? definition.relations
+			: undefined;
+
+		for (const [relationName, relation] of Object.entries(relations ?? {})) {
 			const resolution = resolveJoin(
 				own(declaredJoins, relationName),
 				parent,
@@ -130,13 +132,13 @@ export const defineTables = <AC extends ResourceMap, M extends TableMap<AC>>(
 
 		if (table === null) {
 			throw new Error(
-				`@vetojs/drizzle: ${subject} is the phantom resource "${resource}" (declared without a table) — it has no SQL form.`,
+				`veto: ${subject} is the phantom resource "${resource}" (declared without a table) — it has no SQL form.`,
 			);
 		}
 
 		if (table === undefined) {
 			throw new Error(
-				`@vetojs/drizzle: ${subject} is "${resource}", which is not present in the defineTables table map.`,
+				`veto: ${subject} is "${resource}", which is not present in the defineTables table map.`,
 			);
 		}
 
@@ -152,7 +154,7 @@ export const defineTables = <AC extends ResourceMap, M extends TableMap<AC>>(
 
 		if (meta === undefined) {
 			throw new Error(
-				`@vetojs/drizzle: relation "${relation}" of resource "${from}" is not declared in the ability registry (ac.relations).`,
+				`veto: relation "${relation}" of resource "${from}" is not declared in the ability registry (ac.relations).`,
 			);
 		}
 
@@ -171,7 +173,7 @@ export const defineTables = <AC extends ResourceMap, M extends TableMap<AC>>(
 				resolution === undefined ? "" : ` (${resolution.unavailable})`;
 
 			throw new Error(
-				`@vetojs/drizzle: no join predicate for relation "${relation}" of resource "${from}"${cause} — pass it in defineTables(ac, tables, joins) or declare .references() on the foreign-key column so the join can be derived.`,
+				`veto: no join predicate for relation "${relation}" of resource "${from}"${cause} — pass it in defineTables(ac, tables, joins) or declare .references() on the foreign-key column so the join can be derived.`,
 			);
 		}
 

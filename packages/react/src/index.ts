@@ -3,6 +3,5 @@ export type {
 	AbilityProviderProps,
 	CanProps,
 	ServerCanProps,
-	UseCan,
 	VetoContext,
 } from "./types.js";

@@ -51,6 +51,7 @@ const postsTable = pgTable("posts", {
 	status: text("status").notNull(),
 	title: text("title").notNull(),
 	views: integer("views").notNull(),
+	slug: text("slug").notNull(),
 });
 const commentsTable = pgTable("comments", {
 	id: text("id").primaryKey(),

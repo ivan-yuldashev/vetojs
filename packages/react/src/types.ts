@@ -1,7 +1,7 @@
 import type {
-	AbilitySet,
-	ActionFor,
+	Ability,
 	CheckedRule,
+	DeclaredAction,
 	ResourceMap,
 	ResourceName,
 	ShapeOf,
@@ -16,10 +16,10 @@ import type { ReactNode } from "react";
  * all. `ability` overrides the provider for a subtree that needs a different actor.
  */
 export type CanProps<AC extends ResourceMap, R extends ResourceName<AC>> = {
-	I: ActionFor<AC, R>;
+	I: DeclaredAction<AC, R>;
 	a: R;
 	this?: ShapeOf<AC, R>;
-	ability?: AbilitySet<AC>;
+	ability?: Ability<AC>;
 	children?: ReactNode;
 	fallback?: ReactNode;
 };
@@ -32,8 +32,8 @@ export type ServerCanProps<
 	AC extends ResourceMap,
 	R extends ResourceName<AC>,
 > = {
-	ability: AbilitySet<AC>;
-	I: ActionFor<AC, R>;
+	ability: Ability<AC>;
+	I: DeclaredAction<AC, R>;
 	a: R;
 	this?: ShapeOf<AC, R>;
 	children?: ReactNode;
@@ -48,18 +48,8 @@ export type AbilityProviderProps<AC extends ResourceMap> = {
 	children?: ReactNode;
 } & (
 	| { rules: readonly CheckedRule[]; ability?: never }
-	| { ability: AbilitySet<AC>; rules?: never }
+	| { ability: Ability<AC>; rules?: never }
 );
-
-/**
- * The `useCan` hook: one verdict, re-rendering only when that answer flips rather than
- * whenever the rules change.
- */
-export type UseCan<AC extends ResourceMap> = <R extends ResourceName<AC>>(
-	action: ActionFor<AC, R>,
-	resource: R,
-	instance?: ShapeOf<AC, R>,
-) => boolean;
 
 /**
  * What {@link createVetoContext} returns: the provider, the hooks and the `<Can>`
@@ -67,8 +57,16 @@ export type UseCan<AC extends ResourceMap> = <R extends ResourceName<AC>>(
  */
 export type VetoContext<AC extends ResourceMap> = {
 	AbilityProvider: (props: AbilityProviderProps<AC>) => ReactNode;
-	useAbility: () => AbilitySet<AC>;
-	useCan: UseCan<AC>;
+	useAbility: () => Ability<AC>;
+	/**
+	 * One verdict, re-rendering only when that answer flips rather than whenever the rules
+	 * change.
+	 */
+	useCan: <R extends ResourceName<AC>>(
+		action: DeclaredAction<AC, R>,
+		resource: R,
+		row?: ShapeOf<AC, R>,
+	) => boolean;
 	useSetRules: () => (rules: readonly CheckedRule[]) => void;
 	Can: <R extends ResourceName<AC>>(props: CanProps<AC, R>) => ReactNode;
 };

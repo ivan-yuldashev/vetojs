@@ -19,7 +19,7 @@ const columnKey = (table: Table, column: Column): string => {
 	}
 
 	throw new Error(
-		`@vetojs/drizzle: column "${column.name}" is not part of table "${getTableName(table)}" — inconsistent foreign-key metadata.`,
+		`veto: column "${column.name}" is not part of table "${getTableName(table)}" — inconsistent foreign-key metadata.`,
 	);
 };
 
@@ -28,7 +28,7 @@ const requiredColumn = (table: Table, key: string): Column => {
 
 	if (column === undefined) {
 		throw new Error(
-			`@vetojs/drizzle: column key "${key}" is missing on table "${getTableName(table)}" — the alias lost a column.`,
+			`veto: column key "${key}" is missing on table "${getTableName(table)}" — the alias lost a column.`,
 		);
 	}
 
@@ -66,7 +66,7 @@ export const deriveJoinFromForeignKeys = (
 
 		if (targetColumn === undefined) {
 			throw new Error(
-				`@vetojs/drizzle: the foreign key on "${getTableName(owner)}" pairs ${reference.columns.length} columns with ${reference.foreignColumns.length} — inconsistent metadata.`,
+				`veto: the foreign key on "${getTableName(owner)}" pairs ${reference.columns.length} columns with ${reference.foreignColumns.length} — inconsistent metadata.`,
 			);
 		}
 
@@ -82,16 +82,16 @@ export const deriveJoinFromForeignKeys = (
 				? [childRuntime, parentRuntime]
 				: [parentRuntime, childRuntime];
 
-		const [first, ...rest] = pairs.map(({ ownerKey, targetKey }) =>
+		const [first, ...rest] = pairs.map((pair) =>
 			eq(
-				requiredColumn(ownerRuntime, ownerKey),
-				requiredColumn(targetRuntime, targetKey),
+				requiredColumn(ownerRuntime, pair.ownerKey),
+				requiredColumn(targetRuntime, pair.targetKey),
 			),
 		);
 
 		if (first === undefined) {
 			throw new Error(
-				`@vetojs/drizzle: the foreign key on "${getTableName(owner)}" pairs no columns — inconsistent metadata.`,
+				`veto: the foreign key on "${getTableName(owner)}" pairs no columns — inconsistent metadata.`,
 			);
 		}
 

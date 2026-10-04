@@ -50,7 +50,7 @@ allow("read", "post", { where: { views: { contains: 1 } } }); // ✗ contains т
 ## Где применяется
 
 - **`where`** — полная версия: поля плюс ключи связей и `and` / `or` / `not`. См. [условия](./conditions.ru.md) и [связи](./relations.ru.md).
-- **`payload.constraints`** — урезанная: только поля и `and`. Разрешение значений — плоский список допустимого, а `or` и `not` над ним выражали бы запреты, которым место в правиле `deny`. См. [запись](./mutations.ru.md).
+- **`values`** — урезанная: только поля и `and`. Разрешение значений — плоский список допустимого, а `or` и `not` над ним выражали бы запреты, которым место в правиле `deny`. См. [запись](./mutations.ru.md).
 
 ## Почему так устроено
 
@@ -59,4 +59,4 @@ allow("read", "post", { where: { views: { contains: 1 } } }); // ✗ contains т
 
 ## Исходники
 
-[`api/condition-shorthand.ts`](../packages/core/src/api/condition-shorthand.ts) · [`api/where-input.ts`](../packages/core/src/api/where-input.ts) · тесты: [where-input](../packages/core/tests/api/where-input.test.ts), [запись](../packages/core/tests/api/mutation.test.ts)
+[`create/condition-shorthand.ts`](../packages/core/src/create/condition-shorthand.ts) · [`create/where-input.ts`](../packages/core/src/create/where-input.ts) · тесты: [where-input](../packages/core/tests/create/where-input.test.ts), [запись](../packages/core/tests/api/mutation.test.ts)

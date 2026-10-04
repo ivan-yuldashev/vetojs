@@ -11,11 +11,10 @@ const { allow, deny } = createRules(ac);
 
 const policyFor = (actor: User) => [
 	allow("read", "post", { where: { status: "published" } }),
-	allow(["update", "publish"], "post", {
+	allow(["update", "publish"], { post: ["title", "content", "status"] }, {
 		where: { authorId: actor.id },
-		payload: { fields: ["title", "content", "status"] },
 	}),
-	deny("update", "post", { payload: { fields: ["featured"] } }),
+	deny("update", { post: ["featured"] }),
 ];
 ```
 
@@ -47,17 +46,9 @@ allow(action, resource, {
 
 `where` принимает вложенную короткую запись из разделов [условия](./conditions.ru.md) и [связи](./relations.ru.md); `constraints` — плоскую запись по полям ([короткая запись](./condition-shorthand.ru.md)). И то и другое сразу превращается в обычный JSON — на руках у вас данные, а не билдер.
 
-По умолчанию связи вкладываются на три уровня. Если ваша схема глубже, поднимите предел:
-
-```ts
-const { allow } = createRules(ac, { maxDepth: 5 });
-```
-
-Предел нужен, чтобы вывод типов оставался быстрым: каждый лишний уровень умножает работу компилятора на каждом `where`.
-
 ## Правила помнят, откуда они взялись
 
-`buildAbility` принимает только проверенные правила — либо от этих фабрик (проверил компилятор), либо от [`parseRules`](./parse.ru.md) со словарём (проверка во время работы). Правило, написанное литералом руками, не скомпилируется:
+`buildAbility` принимает только проверенные правила — либо от этих фабрик (проверил компилятор), либо от [`parseRules`](./parse.ru.md) (проверка во время работы). Правило, написанное литералом руками, не скомпилируется:
 
 ```ts
 buildAbility(ac, [{ effect: "allow", action: "read", resource: "post" }]); // ✗
@@ -94,4 +85,4 @@ allow("read", "post", { where: { blog: { workspace: { id: { in: writer } } } } }
 
 ## Исходники
 
-[`api/create-rules.ts`](../packages/core/src/api/create-rules.ts) · [тесты](../packages/core/tests/api/create-rules.test.ts)
+[`create/create-rules.ts`](../packages/core/src/create/create-rules.ts) · [тесты](../packages/core/tests/create/create-rules.test.ts)

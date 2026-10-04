@@ -37,7 +37,7 @@ const { allow, deny } = createRules(ac);
 const policyFor = (user: { id: string }) => [
 	allow("read", "post", { where: { status: "published" } }),
 	allow(["update", "publish"], "post", { where: { authorId: user.id } }),
-	deny("update", "post", { payload: { fields: ["featured"] } }),
+	deny("update", { post: ["featured"] }),
 ];
 
 // 3. Build once per request, then check access.
@@ -54,16 +54,14 @@ ability.can("update", "post", post);
 |---|---|---|
 | `defineAbilities` | `({ resources }) => AC` | declares resources, actions, relations. `schema` is optional: leave it out for a resource with no rows — a screen, a report — and its shape is empty, so no row and no field comparison type-check |
 | `shape<T>()` | `() => Schema<T>` | carries a row shape and checks nothing at runtime. Pass a Zod / Valibot / ArkType schema instead and `ability.validate` starts checking data — the shape is then inferred from it. **Not Yup**: its Standard Schema implementation is async, and an async schema throws |
-| `createRules` | `(ac, { maxDepth? }?) => { allow, deny }` | typed rule factories |
-| `buildAbility` | `(ac, rules) => AbilitySet` | turns a policy into the object you call |
-| `parseRules` | `(json, vocabulary) => RuleParseResult` | validates untrusted rule JSON |
-| `toVocabulary` | `(ac) => Vocabulary` | serializable names for storing a vocabulary |
+| `createRules` | `(ac) => { allow, deny }` | typed rule factories |
+| `buildAbility` | `(ac, rules) => Ability` | turns a policy into the object you call |
+| `parseRules` | `(json) => RuleParseResult` | validates the shape of untrusted rule JSON |
 | `markLoaded` | `(row, relation, value) => row` | states a relation is loaded |
-| `"manage"` | action name | the wildcard: an `allow("manage", "post")` grants every action `post` declares, **including ones added later**. Write the list out instead — `allow([...ac.post.actions], "post")` — when the grant should be a snapshot |
+| `"manage"` | action name | the wildcard: an `allow("manage", "post")` grants every action `post` declares, **including ones added later**. Write the list out instead — `allow([...ac.post.actions], "post")` — when the grant should be a snapshot. Rules only: a question names a declared action, and `can("manage", …)` does not compile |
 | `ConditionOperator` | const object | `eq ne in nin gt gte lt lte contains exists has hasAny hasAll` |
 | `ForbiddenError` | class | `.action`, `.resource`, `.violations?`; recognise it with `ForbiddenError.is(error)`, not `instanceof` |
 | `RelationNotLoadedError` | class | `.relation` |
-| `type<T>()` | `() => Schema<T>` | **deprecated**, the former name of `shape`, same function. Existing code keeps working; write `shape` in new code |
 
 Methods on `ability`:
 
@@ -71,7 +69,7 @@ Methods on `ability`:
 |---|---|---|
 | `can(action, resource, row?)` | `boolean` | branching. **Without a row the answer is optimistic** — true when some `allow` covers the action and no blanket `deny` overrides it — which is what a render decision needs before a row exists |
 | `cannot(action, resource, row?)` | `boolean` | early exits |
-| `authorize(action, resource, row?)` | `void`, throws `ForbiddenError` | server boundaries |
+| `authorize(action, resource, row?)` | `void`, throws `ForbiddenError` | server boundaries. **Without a row it does not guess** — it passes only when an `allow` with no `where` covers the action and no `deny` reads the row |
 | `canMutate(action, resource, row)` | `boolean` | may this row be written |
 | `validatePayload(action, resource, row, data)` | `{ ok: true, data } \| { ok: false, violations }` | may this data be written |
 | `permittedFields(action, resource, fields)` | subset of `fields` | driving a form |
@@ -122,7 +120,7 @@ export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
 
 `createGuard({ ac, getActor, policy })` returns `withPermission(options, handler)`. It knows no framework — the same wrapper guards a server action, an HTTP handler and an agent's tool call. Declare `load` for the row and `payload` for what is being written; the handler runs only if both pass. `ctx.payload` is the validated copy, and `ctx.row` is a row rather than a maybe-row whenever `load` is declared. See [the guide](./guard.md).
 
-A resource is a noun in the vocabulary, not a table, so an effect with nothing to fetch — sending mail, writing a file, calling a webhook, charging a card — is guarded the same way: `load` builds the row out of the arguments, deriving the fields the policy judges (`recipientDomain`, not the raw address). Skipping `load` there is a mistake: the row-less answer is optimistic, and a conditional `deny` refuses every call. See [guarding what an agent does](./agents.md).
+A resource is a noun in the vocabulary, not a table, so an effect with nothing to fetch — sending mail, writing a file, calling a webhook, charging a card — is guarded the same way: `load` builds the row out of the arguments, deriving the fields the policy judges (`recipientDomain`, not the raw address). Skipping `load` there is a mistake: without a row an `allow` with a `where` grants nothing, and a conditional `deny` refuses every call. See [guarding what an agent does](./agents.md).
 
 ## Writing conditions
 
@@ -186,16 +184,16 @@ db.select().from(posts).where(schema.filter(ability, "read", "post", eq(posts.id
 ## Rules from outside
 
 ```ts
-const result = parseRules(JSON.parse(raw), ac);
+const result = parseRules(JSON.parse(raw));
 if (!result.ok) throw new Error(result.errors.join("\n"));
 const ability = buildAbility(ac, result.rules);
 ```
 
-`buildAbility` expects rules that passed a check — from `createRules` or from `parseRules` **with a vocabulary**. The type system enforces this wherever the value still has a type (see the note below about `any`).
+`buildAbility` expects rules that passed a check — from `createRules` or from `parseRules`. The type system enforces this wherever the value still has a type (see the note below about `any`).
 
 ## Emitting rules as JSON
 
-When you are producing a policy rather than calling one — filling an admin UI, writing to a database — emit the stored form and let the gate check it. `toVocabulary(ac)` is the contract to write against: names only, no schemas, a few hundred bytes for a typical domain.
+When you are producing a policy rather than calling one — filling an admin UI, writing to a database — emit the stored form and let the gate check it. The gate checks the shape; the names are on you, so generate them from the same declarations the reading build uses.
 
 ```ts
 const proposed = [
@@ -204,24 +202,17 @@ const proposed = [
 		action: ["update", "publish"],
 		resource: "post",
 		where: { field: "authorId", op: "eq", value: "u1" },
-		payload: {
-			fields: ["status"],
-			constraints: { field: "status", op: "in", value: ["draft"] },
-		},
+		fields: ["status"],
+		values: { field: "status", op: "in", value: ["draft"] },
 	},
 ];
 
-const result = parseRules(proposed, toVocabulary(ac));
+const result = parseRules(proposed);
 ```
 
-Two failure modes, and they want different responses:
+One failure mode: `ok: false` means the shape is wrong, and every error carries a path, like `rules[0].where.op: unknown operator "regex"`. Fix and retry.
 
-| Result | Meaning | What to do |
-|---|---|---|
-| `ok: false` | the shape is wrong | fix and retry — every error carries a path, like `rules[0].where.op: unknown operator "regex"` |
-| `ok: true` with a non-empty `unknown` | a name this deployment doesn't know | an `allow` was **quarantined** and grants nothing; a `deny` was **kept**, because a prohibition must keep protecting |
-
-Reading only `result.rules` hides the second one: an invented action or resource makes an `allow` vanish without a word. Check `unknown` and report it.
+Names are not one of the things it answers. An invented action or resource passes the gate and then matches nothing — an `allow` grants nothing, a `deny` protects nothing — and an invented relation throws on the first check that reaches it. Emit names from the declarations, not from memory.
 
 **One shape per node.** A condition node names exactly one of `and` / `or` / `not` / `relation` / a field. Writing a field *and* an `and` in the same object is rejected — nothing merges them, and the reader would take one and drop the other.
 
@@ -248,7 +239,7 @@ buildAbility(ac, parseRules(JSON.parse(raw), ac).rules); // ✓
 
 Note the comment: this one **does** compile, because `JSON.parse` returns `any`. The type system rejects a hand-written literal or a plain `Rule[]`, but nothing can catch a value that discarded its type. Do not rely on the compiler here.
 
-**Using the row-less check as a row guard.** `can("update", "post")` and `authorize("update", "post")` answer *could this be allowed for some row* — they are for rendering decisions, not for guarding an operation on a specific row. If you have the row, pass it.
+**Using the row-less check as a row guard.** `can("update", "post")` answers *could this be allowed for some row* — it is for rendering decisions, not for guarding an operation on a specific row. `authorize("update", "post")` refuses rather than guess, so the same mistake there is a 403 for an actor who may update only their own posts. If you have the row, pass it.
 
 **Forgetting to load a relation the rule needs.** If a rule reads `post.author.role`, the author must be on the object, or `can()` throws `RelationNotLoadedError`. Load it in the query:
 

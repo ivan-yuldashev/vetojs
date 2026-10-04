@@ -3,6 +3,10 @@
 	"compilerOptions": {
 		"module": "Preserve",
 		"moduleResolution": "Bundler",
+		"paths": {
+			"@vetojs/core": ["../../packages/core/src/index.ts"],
+			"@vetojs/core/guard": ["../../packages/core/src/guard/index.ts"]
+		},
 		"noEmit": true
 	},
 	"include": ["src"]

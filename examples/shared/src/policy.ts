@@ -47,16 +47,17 @@ export const policyFor = (actor: Actor): CheckedRules => {
 			allow("read", "post", {
 				where: { blog: { workspace: { id: { in: writer } } } },
 			}),
-			allow(["update", "publish"], "post", {
-				where: {
-					authorId: actor.id,
-					blog: { workspace: { id: { in: writer } } },
+			allow(
+				["update", "publish"],
+				{ post: ["title", "status"] },
+				{
+					where: {
+						authorId: actor.id,
+						blog: { workspace: { id: { in: writer } } },
+					},
+					values: { status: { in: ["draft"] } },
 				},
-				payload: {
-					fields: ["title", "status"],
-					constraints: { status: { in: ["draft"] } },
-				},
-			}),
+			),
 		);
 	}
 

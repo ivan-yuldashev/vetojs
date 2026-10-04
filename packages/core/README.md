@@ -75,10 +75,10 @@ type PostActions = ActionFor<typeof ac, "post">;
 //   ^? "read" | "update" | "publish" | "manage"
 
 ability.can("publish", "post", post);
-//           ^| autocomplete offers these four and nothing else
+//           ^| autocomplete offers these three and nothing else
 ```
 
-`manage` is added to every resource — a wildcard action that covers all the others.
+`manage` is added to every resource for rules — a wildcard that covers all the other actions. A question names the action it asks about, so `can` offers the declared ones and never `manage`.
 
 Return types are inferred from the same place:
 

@@ -44,7 +44,7 @@ Where each answer comes from:
 | `views > "abc"` — a number against a string | **unknown** | there is no meaningful ordering between them |
 | `NaN`, or an invalid `Date` | **unknown** | nothing orders against it, so no comparison can settle |
 | `status in "draft"` — the list isn't a list | **unknown** | the rule is malformed; see below |
-| An operator the engine doesn't know | **no** | malformed rules deny, they don't crash |
+| An operator the engine doesn't know | **unknown** | a malformed rule grants nothing and its `deny` still fires; it never crashes |
 
 ### Ordering details
 
@@ -65,6 +65,6 @@ If a malformed list answered a plain **no** for `in`, then `nin` — its negatio
 
 ## Source
 
-[`evaluation/operator.ts`](../packages/core/src/evaluation/operator.ts) · [tests](../packages/core/tests/evaluation/operator.test.ts)
+[`verdict/operator.ts`](../packages/core/src/verdict/operator.ts) · [tests](../packages/core/tests/verdict/operator.test.ts)
 
 `ConditionOperator` is exported from `@vetojs/core` for database adapters; the evaluator itself is internal — you reach it through `ability.can(...)`.

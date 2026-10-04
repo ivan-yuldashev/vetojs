@@ -1,37 +1,35 @@
 export type {
+	Ability,
 	AbilityOptions,
-	AbilitySet,
-	ActionFor,
-	CheckedRule,
-	CheckedRules,
-	DecisionReport,
+	Decision,
 	PayloadResult,
 	PayloadViolation,
+} from "./api/index.js";
+export { buildAbility } from "./api/index.js";
+export type {
+	ActionFor,
+	DeclaredAction,
 	ResourceMap,
 	ResourceName,
-	RuleParseResult,
 	Schema,
 	SchemaIssue,
 	ShapeOf,
-	UnknownRule,
 	ValidateResult,
-	Vocabulary,
-} from "./api/index.js";
-export {
-	buildAbility,
-	createRules,
-	defineAbilities,
-	parseRules,
-	shape,
-	toVocabulary,
-	type,
-} from "./api/index.js";
+} from "./create/index.js";
+export { createRules, defineAbilities, shape } from "./create/index.js";
 export { ForbiddenError, RelationNotLoadedError } from "./errors/index.js";
-export { markLoaded } from "./evaluation/index.js";
-export type { ConditionNode, Rule, RulePayload } from "./model/index.js";
+export type {
+	CheckedRule,
+	CheckedRules,
+	ConditionNode,
+	Rule,
+} from "./model/index.js";
 export {
 	ConditionOperator,
 	MatchQuantifier,
 	RelationKind,
 	RuleEffect,
-} from "./shared/index.js";
+} from "./model/index.js";
+export { markLoaded } from "./row/index.js";
+export type { RuleParseResult } from "./validate/index.js";
+export { parseRules } from "./validate/index.js";

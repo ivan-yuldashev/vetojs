@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RelationNotLoadedError } from "../../src/errors/relation-not-loaded.js";
+import { RelationNotLoadedError } from "../../src/errors/index.js";
 
 describe("RelationNotLoadedError", () => {
 	it("is an Error that carries the relation name", () => {

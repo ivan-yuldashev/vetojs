@@ -109,7 +109,7 @@ const canEdit = useCan("update", "post", post);
 </Can>;
 
 <AbilityProvider rules={rules} ability={ability}>
-//                             ^^^^^^^ ✗ Type 'AbilitySet<…>' is not assignable to type 'undefined'
+//                             ^^^^^^^ ✗ Type 'Ability<…>' is not assignable to type 'undefined'
 	<EditButton />
 </AbilityProvider>;
 ```

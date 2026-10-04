@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ForbiddenError } from "../../src/errors/forbidden.js";
+import { ForbiddenError } from "../../src/errors/index.js";
 
 describe("ForbiddenError", () => {
 	it("carries action and resource and extends Error", () => {

@@ -50,7 +50,7 @@ You don't have to think about it when checking: a `Date` field from your ORM com
 ## Two places it's used
 
 - **`where`** — full version: fields, plus relation keys and `and` / `or` / `not`. See [conditions](./conditions.md) and [relations](./relations.md).
-- **`payload.constraints`** — restricted version: fields and `and` only. Value authorization is a flat list of allowed values; `or` and `not` over it would express prohibitions that belong in a `deny` rule instead. See [mutations](./mutations.md).
+- **`values`** — restricted version: fields and `and` only. Value authorization is a flat list of allowed values; `or` and `not` over it would express prohibitions that belong in a `deny` rule instead. See [mutations](./mutations.md).
 
 ## Why it works this way
 
@@ -59,4 +59,4 @@ You don't have to think about it when checking: a `Date` field from your ORM com
 
 ## Source
 
-[`api/condition-shorthand.ts`](../packages/core/src/api/condition-shorthand.ts) · [`api/where-input.ts`](../packages/core/src/api/where-input.ts) · tests: [where-input](../packages/core/tests/api/where-input.test.ts), [mutations](../packages/core/tests/api/mutation.test.ts)
+[`create/condition-shorthand.ts`](../packages/core/src/create/condition-shorthand.ts) · [`create/where-input.ts`](../packages/core/src/create/where-input.ts) · tests: [where-input](../packages/core/tests/create/where-input.test.ts), [mutations](../packages/core/tests/api/mutation.test.ts)

@@ -1,326 +1,61 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { buildAbility } from "../../src/api/ability.js";
-import type {
-	CheckedRule,
-	CheckedRules,
-} from "../../src/api/checked-rules.types.js";
-import { createRules } from "../../src/api/create-rules.js";
-import { defineAbilities } from "../../src/api/define-abilities.js";
-import { shape } from "../../src/api/schema.js";
+import type { Ability, Decision } from "../../src/api/index.js";
+import { buildAbility } from "../../src/api/index.js";
+import { createRules, defineAbilities, shape } from "../../src/create/index.js";
 import {
 	ForbiddenError,
 	RelationNotLoadedError,
 } from "../../src/errors/index.js";
+import type { CheckedRule, CheckedRules } from "../../src/model/index.js";
 
 type Post = {
 	authorId: string;
 	status: "draft" | "published";
 	title: string;
+	views: number;
+	comments?: { spam: boolean }[];
 };
 
 const ac = defineAbilities({
 	resources: {
 		post: {
 			schema: shape<Post>(),
-			actions: ["read", "update", "delete", "view"],
-			relations: {
-				post: {
-					resource: "post",
-					kind: "many",
-				},
-			},
+			actions: ["read", "update", "delete"],
+			relations: { comments: { resource: "comment", kind: "many" } },
 		},
+		comment: { schema: shape<{ spam: boolean }>(), actions: ["read"] },
 	},
 });
 
-const { allow } = createRules(ac);
+const { allow, deny } = createRules(ac);
 
-const post: Post = { authorId: "u1", status: "published", title: "hi" };
+const post: Post = {
+	authorId: "u1",
+	status: "published",
+	title: "hi",
+	views: 20,
+};
+const theirs: Post = { ...post, authorId: "u2" };
+const broken = { ...post, views: "abc" } as unknown as Post;
 
-const ability = buildAbility(ac, [
-	allow("read", "post"),
-	allow("update", "post", {
-		where: { authorId: { eq: "u1" } },
-		payload: { fields: ["title"] },
-	}),
-	allow("view", "post", {
-		where: {
-			or: [
-				{ authorId: { eq: "u1" } },
-				{
-					and: [
-						{
-							status: "published",
-							title: "hi",
-						},
-					],
-				},
-			],
-		},
-	}),
+const grant = allow("update", "post");
+const blanket = deny("update", "post");
+const mineOnly = allow("update", "post", { where: { authorId: "u1" } });
+const busyOut = deny("update", "post", { where: { views: { gt: 10 } } });
 
-	// @ts-expect-error 'create' is not in the schema (a dirty rule from the DB)
-	allow("create", "post"),
-	// @ts-expect-error 'comment' is not in the schema (a dirty rule from the DB)
-	allow("update", "comment", {
-		where: { is: { eq: "a" } },
-	}),
-]);
+describe("buildAbility", () => {
+	it("exposes a copy of its rules, branded for the client", () => {
+		const policy = [grant];
+		const ability = buildAbility(ac, policy);
 
-describe("buildAbility — typed AbilitySet", () => {
-	it("exposes its rules", () => {
-		expect(ability.rules).toHaveLength(5);
+		policy.push(blanket);
+
+		expect(ability.rules).toEqual([grant]);
+		expect(ability.can("update", "post", post)).toBe(true);
+		expectTypeOf(ability.rules).toEqualTypeOf<readonly CheckedRule[]>();
+		expect(() => buildAbility(ac, ability.rules)).not.toThrow();
 	});
 
-	describe("can / cannot", () => {
-		it("delegates to evaluation, narrowed per resource", () => {
-			expect(ability.can("read", "post", post)).toBe(true);
-			expect(ability.can("update", "post", post)).toBe(true);
-
-			const foreignPost = { ...post, authorId: "u2" };
-			expect(ability.can("update", "post", foreignPost)).toBe(false);
-			expect(ability.cannot("update", "post", foreignPost)).toBe(true);
-		});
-
-		it("returns false for actions without explicitly defined rules", () => {
-			expect(ability.can("delete", "post", post)).toBe(false);
-			expect(ability.cannot("delete", "post", post)).toBe(true);
-		});
-	});
-
-	describe("can / cannot without an instance (optimistic UI gating)", () => {
-		it("is true when an allow exists and no blanket deny overrides it", () => {
-			expect(ability.can("read", "post")).toBe(true);
-			expect(ability.can("update", "post")).toBe(true);
-		});
-
-		it("is false when no allow rule matches the action", () => {
-			expect(ability.can("delete", "post")).toBe(false);
-			expect(ability.cannot("delete", "post")).toBe(true);
-		});
-
-		it("is false when a blanket (unconditional) deny is present", () => {
-			const { allow: localAllow, deny: localDeny } = createRules(ac);
-			const guarded = buildAbility(ac, [
-				localAllow("read", "post"),
-				localDeny("read", "post"),
-			]);
-			expect(guarded.can("read", "post")).toBe(false);
-		});
-	});
-
-	describe("authorize", () => {
-		it("does not throw when the action is permitted", () => {
-			expect(() => ability.authorize("read", "post", post)).not.toThrow();
-		});
-
-		it("throws ForbiddenError when the action is denied", () => {
-			const foreignPost = { ...post, authorId: "u2" };
-			expect(() => ability.authorize("update", "post", foreignPost)).toThrow(
-				ForbiddenError,
-			);
-		});
-
-		it("carries action and resource on the error", () => {
-			expect.assertions(4);
-			try {
-				ability.authorize("delete", "post", post);
-			} catch (error) {
-				expect(error).toBeInstanceOf(ForbiddenError);
-				const forbidden = error as ForbiddenError;
-				expect(forbidden.action).toBe("delete");
-				expect(forbidden.resource).toBe("post");
-				expect(forbidden.violations).toBeUndefined();
-			}
-		});
-	});
-
-	describe("canMutate", () => {
-		it("checks the row against mutation rules", () => {
-			expect(ability.canMutate("update", "post", post)).toBe(true);
-			expect(
-				ability.canMutate("update", "post", { ...post, authorId: "u2" }),
-			).toBe(false);
-		});
-
-		it("accepts a partial candidate row (pre-insert create flow)", () => {
-			const candidate: Partial<Post> = { authorId: "u1" };
-			expect(ability.canMutate("update", "post", candidate)).toBe(true);
-			expect(
-				ability.validatePayload("update", "post", candidate, { title: "x" }),
-			).toEqual({ ok: true, data: { title: "x" } });
-		});
-	});
-
-	describe("complex where conditions (nested OR/AND)", () => {
-		it("evaluates deep logical conditions correctly (allow if owner OR (published AND correct title))", () => {
-			expect(ability.canMutate("view", "post", post)).toBe(true);
-			expect(
-				ability.canMutate("view", "post", {
-					...post,
-					authorId: "u2",
-					title: "h",
-				}),
-			).toBe(false);
-
-			expect(
-				ability.canMutate("view", "post", {
-					...post,
-					authorId: "u2",
-					title: "hi",
-					status: "published",
-				}),
-			).toBe(true);
-		});
-	});
-
-	describe("Handling of dirty/legacy rules (Runtime safety)", () => {
-		it("evaluates rules that exist in runtime but are invalid in strict schema", () => {
-			// @ts-expect-error
-			expect(ability.canMutate("create", "post", post)).toBe(true);
-
-			// @ts-expect-error
-			expect(ability.canMutate("update", "comment", post)).toBe(false);
-		});
-	});
-
-	describe("Handling of malformed runtime data (Edge cases)", () => {
-		it("safely denies access when instance is missing strictly evaluated fields", () => {
-			const malformedPost = {} as Record<string, unknown>;
-			// @ts-expect-error garbage instance (Record instead of Post) — runtime fail-closed check
-			expect(ability.can("update", "post", malformedPost)).toBe(false);
-		});
-
-		it("safely denies access when instance is completely null", () => {
-			const nullPost = null;
-			// @ts-expect-error null instead of an instance — the engine must not crash
-			expect(() => ability.can("update", "post", nullPost)).not.toThrow();
-			// @ts-expect-error null instead of an instance — fail-closed (false)
-			expect(ability.can("update", "post", nullPost)).toBe(false);
-		});
-	});
-
-	describe("validatePayload", () => {
-		it("allows permitted fields", () => {
-			expect(
-				ability.validatePayload("update", "post", post, { title: "new" }),
-			).toEqual({ ok: true, data: { title: "new" } });
-		});
-
-		it("rejects restricted fields", () => {
-			expect(
-				ability.validatePayload("update", "post", post, { status: "draft" }),
-			).toEqual({
-				ok: false,
-				violations: [{ field: "status", reason: "field not permitted" }],
-			});
-		});
-
-		it("rejects payload entirely if it contains at least one restricted field mixed with permitted ones", () => {
-			expect(
-				ability.validatePayload("update", "post", post, {
-					title: "new title",
-					status: "draft",
-				}),
-			).toEqual({
-				ok: false,
-				violations: [{ field: "status", reason: "field not permitted" }],
-			});
-		});
-
-		it("allows empty payloads", () => {
-			expect(ability.validatePayload("update", "post", post, {})).toEqual({
-				ok: true,
-				data: {},
-			});
-		});
-
-		it("rejects payload fields that are completely unknown to the strict schema but not explicitly allowed", () => {
-			expect(
-				ability.validatePayload("update", "post", post, {
-					// @ts-expect-error 'someGarbage' is not a schema field (garbage from the network)
-					someGarbage: "hack",
-				}),
-			).toEqual({
-				ok: false,
-				violations: [{ field: "someGarbage", reason: "field not permitted" }],
-			});
-		});
-
-		it("gracefully handles null or non-object payloads (Fail-Closed)", () => {
-			// @ts-expect-error
-			const result = ability.validatePayload("update", "post", post, null);
-			expect(result.ok).toBe(false);
-		});
-	});
-
-	describe("permittedFields", () => {
-		it("filters requested fields against the rule's permitted fields", () => {
-			const fields = ability.permittedFields("update", "post", [
-				"title",
-				"status",
-			]);
-			expect(fields).toEqual(["title"]);
-		});
-
-		it("returns the requested fields if no specific payload restriction exists", () => {
-			const fields = ability.permittedFields("read", "post", ["title"]);
-			expect(fields).toEqual(["title"]);
-		});
-
-		it("types the result as the fields that were asked about", () => {
-			const asked: "title"[] = ability.permittedFields("update", "post", [
-				"title",
-			]);
-
-			expect(asked).toEqual(["title"]);
-		});
-	});
-
-	describe("validate (trust gate)", () => {
-		it("fails closed if the resource is not in the registry", () => {
-			// @ts-expect-error unregistered resource
-			const result = ability.validate("unknown", { foo: "bar" });
-			expect(result).toEqual({
-				ok: false,
-				issues: [{ message: 'unknown resource "unknown"' }],
-			});
-		});
-
-		it("passes object data through the phantom schema of a known resource", () => {
-			expect(ability.validate("post", { authorId: "u1" })).toEqual({
-				ok: true,
-				value: { authorId: "u1" },
-			});
-		});
-	});
-
-	describe("where", () => {
-		it("compiles condition node for given action and resource", () => {
-			const condition = ability.where("update", "post");
-			expect(condition).toEqual({
-				field: "authorId",
-				op: "eq",
-				value: "u1",
-			});
-		});
-
-		it("returns restrictive condition node for actions without rules", () => {
-			const condition = ability.where("delete", "post");
-			expect(condition).toEqual({ or: [] });
-		});
-	});
-
-	describe("Empty rules (Default Deny)", () => {
-		it("denies all operations when ability set is initialized with empty rules", () => {
-			const emptyAbility = buildAbility(ac, []);
-			expect(emptyAbility.can("read", "post", post)).toBe(false);
-			expect(emptyAbility.canMutate("update", "post", post)).toBe(false);
-		});
-	});
-});
-
-describe("buildAbility — tolerates rules outside the registry", () => {
 	it("keeps dirty rules as-is — does not throw, drop, or warn", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const dirty = buildAbility(ac, [
@@ -328,75 +63,302 @@ describe("buildAbility — tolerates rules outside the registry", () => {
 			{ effect: "allow", action: "create", resource: "post" },
 			{ effect: "deny", action: "delete", resource: "psot" },
 		] as CheckedRules);
+
 		expect(dirty.rules).toHaveLength(3);
 		expect(warn).not.toHaveBeenCalled();
 		warn.mockRestore();
 	});
 });
 
-describe("AbilitySet — relations via the where builder", () => {
-	const relationAbility = buildAbility(ac, [
-		allow("read", "post", {
-			where: { post: { some: { status: { eq: "published" } } } },
-		}),
-	]);
+describe("the answer each call gives", () => {
+	type Calls = {
+		can: boolean;
+		cannot: boolean;
+		authorize: boolean;
+		canMutate: boolean;
+	};
 
-	it("allows when a loaded to-many relation satisfies the condition", () => {
-		const withRelation = {
-			...post,
-			post: [
-				{ authorId: "u2", status: "draft", title: "a" },
-				{ authorId: "u3", status: "published", title: "b" },
-			],
-		};
-		expect(relationAbility.can("read", "post", withRelation)).toBe(true);
+	const refusesToAuthorize = (run: () => void): boolean => {
+		try {
+			run();
+			return false;
+		} catch (error) {
+			if (ForbiddenError.is(error)) {
+				return true;
+			}
+
+			throw error;
+		}
+	};
+
+	const callsOf = (ability: Ability, row?: Post): Calls => ({
+		can: ability.can("update", "post", row),
+		cannot: ability.cannot("update", "post", row),
+		authorize: !refusesToAuthorize(() =>
+			ability.authorize("update", "post", row),
+		),
+		canMutate: ability.canMutate("update", "post", row),
 	});
 
-	it("denies when no related record satisfies the condition", () => {
-		const withRelation = {
-			...post,
-			post: [{ authorId: "u2", status: "draft", title: "a" }],
-		};
-		expect(relationAbility.can("read", "post", withRelation)).toBe(false);
+	const settled = (allowed: boolean): Calls => ({
+		can: allowed,
+		cannot: !allowed,
+		authorize: allowed,
+		canMutate: allowed,
 	});
 
-	it("throws RelationNotLoadedError when the relation is not loaded", () => {
-		expect(() => relationAbility.can("read", "post", post)).toThrow(
-			RelationNotLoadedError,
+	const optimistic: Calls = {
+		can: true,
+		cannot: false,
+		authorize: false,
+		canMutate: false,
+	};
+
+	it.each([
+		["a settled grant, with a row", [grant], post, settled(true)],
+		["a settled grant, without a row", [grant], undefined, settled(true)],
+		["a settled refusal, with a row", [grant, blanket], post, settled(false)],
+		[
+			"a settled refusal, without a row",
+			[grant, blanket],
+			undefined,
+			settled(false),
+		],
+		[
+			"an allow that needs the row, without one",
+			[mineOnly],
+			undefined,
+			optimistic,
+		],
+		[
+			"a deny that needs the row, without one",
+			[grant, busyOut],
+			undefined,
+			optimistic,
+		],
+		["an open answer, with a row", [grant, busyOut], broken, settled(false)],
+	] as [
+		string,
+		CheckedRule[],
+		Post | undefined,
+		Calls,
+	][])("%s", (_name, rules, row, expected) => {
+		expect(callsOf(buildAbility(ac, rules), row)).toEqual(expected);
+	});
+
+	it("refuses a row it will not read from every call, where a plain copy passes", () => {
+		const ability = buildAbility(ac, [
+			allow(
+				"update",
+				{ post: ["title", "status"] },
+				{ where: { authorId: "u1" } },
+			),
+		]);
+		const fields: ("title" | "status")[] = ["title", "status"];
+		const entity = Object.assign(new (class PostEntity {})(), post);
+
+		expect(ability.can("update", "post", { ...post })).toBe(true);
+		expect(
+			ability.permittedFields("update", "post", { ...post }, fields),
+		).toEqual(fields);
+
+		for (const row of [entity, [post], new Date()] as Post[]) {
+			expect(ability.can("update", "post", row)).toBe(false);
+			expect(ability.canMutate("update", "post", row)).toBe(false);
+			expect(
+				ability.validatePayload("update", "post", row, { title: "t" }).ok,
+			).toBe(false);
+			expect(ability.permittedFields("update", "post", row, fields)).toEqual(
+				[],
+			);
+		}
+	});
+
+	it("carries action and resource on the error, and no violations", () => {
+		expect.assertions(4);
+
+		try {
+			buildAbility(ac, []).authorize("delete", "post", post);
+		} catch (error) {
+			expect(error).toBeInstanceOf(ForbiddenError);
+			const forbidden = error as ForbiddenError;
+			expect(forbidden.action).toBe("delete");
+			expect(forbidden.resource).toBe("post");
+			expect(forbidden.violations).toBeUndefined();
+		}
+	});
+});
+
+describe("the decision each call reports", () => {
+	const heard = (rules: CheckedRule[], ask: (ability: Ability) => unknown) => {
+		const seen: Decision[] = [];
+
+		ask(
+			buildAbility(ac, rules, {
+				onDecision: (decision) => seen.push(decision),
+			}),
 		);
-	});
-});
 
-describe("authorize without an instance", () => {
-	const acPost = defineAbilities({
-		resources: {
-			post: { schema: shape<{ id: string }>(), actions: ["create"] },
-		},
-	});
-	const { allow } = createRules(acPost);
+		return seen.map(
+			({ action: _action, resource: _resource, ...rest }) => rest,
+		);
+	};
 
-	it("passes when the action is possible at all", () => {
-		const ability = buildAbility(acPost, [allow("create", "post")]);
-		expect(() => ability.authorize("create", "post")).not.toThrow();
+	it("names the allow behind a grant, settled or optimistic", () => {
+		expect(
+			heard([grant], (ability) => ability.can("update", "post", post)),
+		).toEqual([{ allowed: true, rule: grant }]);
+		expect(
+			heard([mineOnly], (ability) => ability.can("update", "post")),
+		).toEqual([{ allowed: true, rule: mineOnly }]);
 	});
 
-	it("throws when no rule allows the action", () => {
-		const ability = buildAbility(acPost, []);
-		expect(() => ability.authorize("create", "post")).toThrow(ForbiddenError);
+	it("names the deny behind a settled refusal, with a row or without one", () => {
+		for (const row of [post, undefined]) {
+			expect(
+				heard([grant, blanket], (ability) =>
+					ability.canMutate("update", "post", row),
+				),
+			).toEqual([{ allowed: false, rule: blanket }]);
+		}
 	});
-});
 
-describe("ability.rules is ready for the client", () => {
-	it("keeps the checked brand, so it can be handed to a provider", () => {
-		const acPost = defineAbilities({
-			resources: {
-				post: { schema: shape<{ id: string }>(), actions: ["read"] },
+	it("names the deny that read the row, even when its answer was open", () => {
+		expect(
+			heard([grant, busyOut], (ability) =>
+				ability.canMutate("update", "post", broken),
+			),
+		).toEqual([{ allowed: false, rule: busyOut }]);
+	});
+
+	it("names no rule when a deciding call refuses for want of a row", () => {
+		for (const rules of [[mineOnly], [grant, busyOut]]) {
+			expect(
+				heard(rules, (ability) => ability.canMutate("update", "post")),
+			).toEqual([{ allowed: false }]);
+		}
+	});
+
+	it("names no rule when nothing grants", () => {
+		expect(
+			heard([mineOnly], (ability) => ability.can("update", "post", theirs)),
+		).toEqual([{ allowed: false }]);
+	});
+
+	it("says why when the row is not a plain object", () => {
+		const notPlain = [] as unknown as Post;
+
+		expect(
+			heard([grant], (ability) => ability.can("update", "post", notPlain)),
+		).toEqual([{ allowed: false, reason: "not a plain row" }]);
+		expect(
+			heard([grant], (ability) =>
+				ability.validatePayload("update", "post", notPlain, { title: "t" }),
+			),
+		).toEqual([{ allowed: false, violations: [], reason: "not a plain row" }]);
+	});
+
+	it("reports a write with its violations and no rule", () => {
+		expect(
+			heard([allow("update", { post: ["title"] })], (ability) =>
+				ability.validatePayload("update", "post", post, {
+					title: "t",
+					views: 1,
+				}),
+			),
+		).toEqual([
+			{
+				allowed: false,
+				violations: [{ field: "views", reason: "field not permitted" }],
+			},
+		]);
+		expect(
+			heard([grant], (ability) =>
+				ability.validatePayload("update", "post", post, { title: "t" }),
+			),
+		).toEqual([{ allowed: true }]);
+	});
+
+	it("answers the same with a hook as without one, whatever the hook does", () => {
+		const rules = [
+			grant,
+			deny("update", "post", { where: { status: "draft" } }),
+		];
+		const silent = buildAbility(ac, rules);
+		const meddling = buildAbility(ac, rules, {
+			onDecision: (decision) => {
+				(decision as { allowed: boolean }).allowed = !decision.allowed;
 			},
 		});
-		const { allow } = createRules(acPost);
-		const ability = buildAbility(acPost, [allow("read", "post")]);
 
-		expectTypeOf(ability.rules).toEqualTypeOf<readonly CheckedRule[]>();
-		expect(() => buildAbility(acPost, ability.rules)).not.toThrow();
+		for (const row of [post, { ...post, status: "draft" as const }]) {
+			expect(meddling.can("update", "post", row)).toBe(
+				silent.can("update", "post", row),
+			);
+		}
+	});
+
+	it("lets a broken hook surface instead of hiding it", () => {
+		const ability = buildAbility(ac, [grant], {
+			onDecision: () => {
+				throw new TypeError("the log is down");
+			},
+		});
+
+		expect(() => ability.can("update", "post", post)).toThrow(TypeError);
+	});
+});
+
+describe("the questions about a policy", () => {
+	it("hands a database the condition the rules compile to", () => {
+		const ability = buildAbility(ac, [mineOnly]);
+
+		expect(ability.where("update", "post")).toEqual({
+			field: "authorId",
+			op: "eq",
+			value: "u1",
+		});
+		expect(ability.where("delete", "post")).toEqual({ or: [] });
+	});
+
+	it("types permittedFields as the fields that were asked about", () => {
+		const ability = buildAbility(ac, [allow("update", { post: ["title"] })]);
+		const asked: "title"[] = ability.permittedFields(
+			"update",
+			"post",
+			undefined,
+			["title"],
+		);
+
+		expect(asked).toEqual(["title"]);
+	});
+
+	it("fails validate closed for a resource that is not in the registry", () => {
+		// @ts-expect-error unregistered resource
+		expect(buildAbility(ac, []).validate("unknown", { foo: "bar" })).toEqual({
+			ok: false,
+			issues: [{ message: 'unknown resource "unknown"' }],
+		});
+	});
+
+	it("passes object data through the phantom schema of a known resource", () => {
+		expect(buildAbility(ac, []).validate("post", { authorId: "u1" })).toEqual({
+			ok: true,
+			value: { authorId: "u1" },
+		});
+	});
+
+	it("throws for a relation never loaded on the payload path too", () => {
+		const ability = buildAbility(ac, [
+			allow(
+				"update",
+				{ post: ["status"] },
+				{ where: { views: 0, comments: { some: { spam: true } } } },
+			),
+		]);
+
+		expect(() =>
+			ability.validatePayload("update", "post", post, { status: "draft" }),
+		).toThrow(RelationNotLoadedError);
 	});
 });

@@ -220,12 +220,12 @@ Veto на присутствующее значение неверного ти�
 Если правила хранятся в JSON, проверьте их на границе до сборки:
 
 ```ts
-const result = parseRules(JSON.parse(raw), ac);
+const result = parseRules(JSON.parse(raw));
 if (!result.ok) throw new Error(result.errors.join("\n"));
 const ability = buildAbility(ac, result.rules);
 ```
 
-`buildAbility` принимает только правила, доказуемо прошедшие проверку, — из `createRules` либо из `parseRules` со словарём. См. [правила извне](./parse.ru.md).
+`buildAbility` принимает только правила, доказуемо прошедшие проверку, — из `createRules` либо из `parseRules`. См. [правила извне](./parse.ru.md).
 
 ## Порядок действий
 

@@ -98,6 +98,6 @@ Passing `undefined` as the value throws: `undefined` is precisely what "not load
 
 ## Source
 
-[`evaluation/condition.ts`](../packages/core/src/evaluation/condition.ts) · [`errors/relation-not-loaded.ts`](../packages/core/src/errors/relation-not-loaded.ts) · tests: [conditions](../packages/core/tests/evaluation/condition.test.ts), [loaded](../packages/core/tests/evaluation/loaded.test.ts)
+[`compile/matcher.ts`](../packages/core/src/compile/matcher.ts) · [`errors/relation-not-loaded.ts`](../packages/core/src/errors/relation-not-loaded.ts) · tests: [conditions](../packages/core/tests/compile/matcher.test.ts), [loaded](../packages/core/tests/row/loaded.test.ts)
 
 In SQL these compile to `EXISTS` / `NOT EXISTS` subqueries, handled by a database adapter.
