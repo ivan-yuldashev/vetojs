@@ -1,8 +1,9 @@
 import v8 from "node:v8";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
-import { buildAbility } from "../../src/api/index.js";
+import { buildAbility, withEnv } from "../../src/api/index.js";
 import { createRules, defineAbilities, shape } from "../../src/create/index.js";
+import type { CheckedRules } from "../../src/model/index.js";
 
 type Post = { id: string; authorId: string };
 
@@ -92,6 +93,37 @@ describe("what an ability remembers is bounded by what was declared", () => {
 						`${mark}-res${index}` as "post",
 						post,
 					);
+				}
+			});
+
+			expect(grew).toBeLessThan(1);
+		});
+	});
+
+	describe("an environment is answered, not remembered", () => {
+		it("keeps the heap flat under a stream of environments that each drop a different set of rules", () => {
+			const flags = 14;
+			const ability = buildAbility(
+				{},
+				Array.from({ length: flags + 1 }, (_, index) => ({
+					effect: "allow",
+					action: "read",
+					resource: "post",
+					when: { field: `k${index}`, op: "eq", value: true },
+				})) as unknown as CheckedRules,
+			) as never;
+
+			const grew = retained((mark) => {
+				for (let combination = 0; combination < 2 ** flags; combination++) {
+					const env: Record<string, boolean> = {
+						[`k${flags}`]: mark === "measured",
+					};
+
+					for (let index = 0; index < flags; index++) {
+						env[`k${index}`] = ((combination >> index) & 1) === 1;
+					}
+
+					withEnv(ability, env as never).can("read", "post", post as never);
 				}
 			});
 

@@ -99,17 +99,6 @@ describe("what a binding remembers", () => {
 			});
 		}
 	});
-
-	it("hands back one selection per set of rules that take part", () => {
-		const selected = selectionOf(rules);
-
-		expect(resolveWhen(selected, { region: "eu", mfa: false })).toBe(
-			resolveWhen(selected, { region: "eu", mfa: false }),
-		);
-		expect(resolveWhen(selected, { region: "us", mfa: true })).not.toBe(
-			resolveWhen(selected, { region: "eu", mfa: false }),
-		);
-	});
 });
 
 describe("the relations a resolved selection reaches", () => {
