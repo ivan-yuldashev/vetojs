@@ -113,6 +113,8 @@ Translating the condition into SQL one for one breaks the guarantee — because 
 
 So every leaf predicate compiles to something always true or false — `IS DISTINCT FROM`, `COALESCE(…, FALSE)`, and so on — and a mistyped value is answered on the spot rather than handed to Postgres, which would coerce `'5000' > 1000` into showing a row the engine denies.
 
+A condition comparing two fields — `{ spent: { lte: { ref: "limit" } } }` — compiles to a comparison of the two columns, unknown when either is `NULL` or `NaN`, as in the engine.
+
 When a rule has no honest two-valued translation — an operator the adapter doesn't recognise, a quantifier that isn't `some` / `every` / `none`, a column that doesn't exist — it throws while building the query. No SQL runs, so nothing leaks.
 
 ## One table without a resource map

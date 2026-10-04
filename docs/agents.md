@@ -2,9 +2,11 @@
 
 **[English](agents.md) · [Русский](agents.ru.md)**
 
-A tool call is an endpoint with a language model on the other side. The arguments are not a form a user filled in — they are a guess, produced by something that will happily ask for a row belonging to someone else because the schema said `id: string`.
+A tool call is an endpoint with a language model on the other side. Its arguments are a guess: the schema says `id: string`, and the model may well ask for someone else's row. So the question is not "may this agent edit posts" but "may the person it acts for publish *this* post" — the one the interface already asks, answered by the same policy.
 
-So the question is not "may this agent write posts". It is **"may the person this agent is acting for write *this* post"** — the same question the UI asks, answered by the same policy.
+veto limits what an agent can reach; it does not detect a manipulated prompt. An agent talked into something still gets no more than its person could do.
+
+## Guard a tool
 
 ```ts
 type PublishArgs = { id: string; status: "draft" | "published" };
@@ -20,14 +22,12 @@ const publish = withPermission(
 );
 ```
 
-The model chose `args.id`. The guard loads that row and checks it against the actor's policy, so an id belonging to another workspace is refused before your handler exists.
+The guard loads the row the model named and checks it against the person's policy before the handler runs. An id from another workspace is refused; a value the person may not set is refused with the field named.
 
-## The refusal is the feature
-
-An opaque "forbidden" teaches a model nothing, and it retries the same call. A refusal that names the field lets it correct itself:
+## Return a refusal the model can act on
 
 ```ts
-const call = async (args: { id: string; status: "draft" | "published" }) => {
+const call = async (args: PublishArgs) => {
 	try {
 		return { content: [{ type: "text", text: await publish(args) }] };
 	} catch (error) {
@@ -35,80 +35,74 @@ const call = async (args: { id: string; status: "draft" | "published" }) => {
 			throw error;
 		}
 
-		const detail = error.violations
-			?.map((violation) => `${violation.field}: ${violation.reason}`)
-			.join("; ");
+		const detail = error.violations?.map((v) => `${v.field}: ${v.reason}`).join("; ");
 
 		return {
-			content: [
-				{
-					type: "text",
-					text: `Not permitted to ${error.action} ${error.resource}${detail ? ` — ${detail}` : ""}`,
-				},
-			],
 			isError: true,
+			content: [{ type: "text", text: `Not permitted to ${error.action} ${error.resource}${detail ? ` — ${detail}` : ""}` }],
 		};
 	}
 };
 ```
 
-Against a policy that lets an editor set `status` only to `draft`, asking for `published` comes back as `status: value not permitted` rather than a wall. That sentence is the product: it is what the model reads before its next attempt.
+When the person may publish only as `draft`, the model reads `status: value not permitted` and changes the argument instead of repeating the call.
 
-## Reading is the other half
+## Give the agent less than its person
 
-A tool that lists or searches must return what the **actor** may see, not what the server may see. That is a query, not a check — so filter it in the database with the same policy:
+One policy can still treat the agent differently. Declare an [environment](./define-abilities.md#the-requests-environment) key and write a `deny` on it:
 
 ```ts
-const search = async (args: { term: string }) => {
-	const rows = await db
-		.select()
-		.from(posts)
-		.where(schema.filter(ability, "read", "post"));
+const ac = defineAbilities({
+	env: shape<{ viaAgent: boolean }>(),
+	resources: {
+		invoice: { schema: shape<{ id: string; ownerId: string }>(), actions: ["read", "delete"] },
+	},
+});
+const { allow, deny } = createRules(ac);
 
-	return rows.filter((row: Post) => row.title.includes(args.term));
+const policyFor = (actor: { id: string }) => [
+	allow(["read", "delete"], "invoice", { where: { ownerId: actor.id } }),
+	deny("delete", "invoice", { when: { viaAgent: true } }),
+];
+
+const forAgent = createGuard({ ac, getActor, policy: policyFor, getEnv: () => ({ viaAgent: true }) });
+```
+
+The person deletes their invoices in the interface, bound with `{ viaAgent: false }`; the agent can read them and cannot delete one. An environment that leaves `viaAgent` out keeps the `deny` standing, so a forgotten key refuses rather than grants.
+
+## Filter what the agent reads
+
+A tool that lists or searches returns what the person may see, not what the server can reach. Filter in the database with the same policy:
+
+```ts
+const searchPosts = async (term: string) => {
+	const rows = await db.select().from(posts).where(schema.filter(ability, "read", "post"));
+	return rows.filter((row: Post) => row.title.includes(term));
 };
 ```
 
-Retrieval is where an over-permissioned agent leaks quietly: nothing throws, the model simply sees more than the person asking it. See [filtering in the database](./where.md) and the [Drizzle adapter](./drizzle.md).
+Retrieval is where an over-permissioned agent leaks quietly: nothing throws, the model just sees more. See [filtering in the database](./where.md).
 
-## Not every tool touches a database
+## Tools without a table
 
-Sending mail, writing a file, calling a webhook, moving money — none of these have a row to fetch, and they are where a wrong tool call costs the most, because nothing about them can be undone by a rollback. The question is unchanged, and so is the mechanism: **a resource is a noun in your vocabulary, not a table**. The row is a description of the effect itself, computed from the arguments the model chose.
+Mail, files, webhooks, payments have no row to fetch, and a wrong call there cannot be rolled back. A resource is a noun in your vocabulary, not a table, so `load` builds the row from the arguments:
 
 ```ts
 const ac = defineAbilities({
 	resources: {
-		email: {
-			schema: shape<{
-				workspaceId: string;
-				recipientDomain: string;
-				attachments: number;
-			}>(),
-			actions: ["send"],
-		},
+		email: { schema: shape<{ recipientDomain: string; attachments: number }>(), actions: ["send"] },
+		refund: { schema: shape<{ amountCents: number; orderTotalCents: number }>(), actions: ["issue"] },
 	},
 });
-
 const { allow, deny } = createRules(ac);
 
-const policyFor = (actor: { id: string; workspaceId: string }) => [
-	allow("send", "email", {
-		where: {
-			workspaceId: actor.workspaceId,
-			recipientDomain: { in: ["acme.com"] },
-		},
-	}),
+const policyFor = () => [
+	allow("send", "email", { where: { recipientDomain: { in: ["acme.com"] } } }),
 	deny("send", "email", { where: { attachments: { gt: 0 } } }),
+	allow("issue", "refund", { where: { amountCents: { lte: { ref: "orderTotalCents" } } } }),
 ];
 
-const withPermission = createGuard({
-	ac,
-	getActor: () => agent,
-	policy: policyFor,
-});
-
-const domainOf = (address: string) =>
-	address.slice(address.lastIndexOf("@") + 1).toLowerCase();
+const withPermission = createGuard({ ac, getActor: () => agent, policy: policyFor });
 
 type SendArgs = { to: string; subject: string; attachments: string[] };
 
@@ -117,60 +111,44 @@ const sendEmail = withPermission(
 		action: "send",
 		resource: "email",
 		load: (args: SendArgs) => ({
-			workspaceId: agent.workspaceId,
-			recipientDomain: domainOf(args.to),
+			recipientDomain: args.to.slice(args.to.lastIndexOf("@") + 1).toLowerCase(),
 			attachments: args.attachments.length,
 		}),
 	},
-	async (_ctx, args: SendArgs) =>
-		sendMail({ to: args.to, subject: args.subject }),
+	async (_ctx, args: SendArgs) => sendMail({ to: args.to, subject: args.subject }),
 );
 ```
 
-`load` is where a tool's arguments become something a policy can judge, and it is worth deriving the field you actually mean. `recipientDomain` is a decision; the raw address is a string, and a rule written against the string with `contains` accepts `ceo@acme.com.evil.io` — it does contain `@acme.com`, while its domain is `evil.io`. The same shape of derivation covers the other effects: the write root for a file (so `../../etc/passwd` cannot pass as an upload), the host and method for a webhook, the currency and amount for a charge.
+- **Derive the field you mean.** `recipientDomain` is a decision; a rule on the raw address with `contains` accepts `ceo@acme.com.evil.io`. The same goes for the write root of a file, the host of a webhook, the currency of a charge.
+- **Compare against the record.** The refund rule compares two fields of the built row with [`ref`](./conditions.md#comparing-two-fields): the model cannot refund more than the order was worth.
+- **A limit that is state is a field.** Look up the running total and put it in the row: `where: { spentTodayCents: { lte: 50000 } }`.
+- **Always give such a tool a `load`.** Without a row an `allow` with a `where` grants nothing, so every call would be refused.
 
-**Give an effect tool a `load`, always.** Without a row the guard grants only what no row could change: an `allow` with a `where` grants nothing, so a policy that judges the call by what it does refuses every call, legitimate ones included. Synthesizing the row is a few lines, and the guard then judges this call before your handler runs.
-
-**A limit that is state is just another field.** "No more than $500 a day" is not a property of the call, so look the running total up and put it in the row: `where: { spentTodayCents: { lte: 50000 } }` then reads the way the rule sounds. Nothing counts for you — veto answers about one decision, from the values you hand it.
-
-**The payload gate still applies.** Declaring `payload` on the action narrows what the model may write, and the refusal names the field — `amountCents: value not permitted` is what the model reads before its next attempt.
-
-A resource like this has no table, and the adapter is told so: `defineTables(ac, { email: null })`. Filtering is a question about reading, so `where` and `filter` never apply to it — and reaching one through a relation or filtering on it throws rather than quietly producing SQL.
+The Drizzle map marks these resources as tableless: `defineTables(ac, { email: null, refund: null })`.
 
 ## Three things to get right
 
-**A tool with arguments and no row is the strict path.** If you cannot `load` — `deleteFile(path)` has no row to fetch — the guard has only the payload to judge, and against a policy carrying a **conditional `deny`** it refuses every call, including legitimate ones. That is the documented contract, not a bug: an unknown row cannot prove a deny false. Give the tool a `load` — for an effect you [build the row from the arguments](#not-every-tool-touches-a-database) — or keep the resource's denies unconditional.
+**A tool with no row is the strict path.** With only `payload` to judge — `deleteFile(path)` — the guard refuses every call when the policy has a conditional `deny`: an unknown row cannot prove the deny false. Build the row from the arguments, or keep that resource's denies unconditional.
 
-**The guard checks permissions, not shapes.** `validatePayload` answers *may this actor write these fields and values*. It does not run the resource's schema, so `{ title: "no" }` against `z.string().min(3)` passes the guard. Validate the arguments first — the SDKs do it from the tool's input schema — or call [`ability.validate`](./ability.md) yourself.
+**The guard checks permissions, not shapes.** `{ title: "no" }` against `z.string().min(3)` passes it. Validate arguments first — the SDKs do it from the tool's input schema — or call [`ability.validate`](./ability.md#validate--shape-not-permission).
 
-**The actor comes from the host, and the two hosts differ.**
-
-An MCP tool handler receives `(args, extra)`, and `extra.authInfo` is what the server's token validation left behind: the `token` itself, the `clientId`, the granted `scopes`, and an `extra` bag where your validator puts the resolved user — `sub`, `userId`, whatever your tokens carry.
+**The actor comes from the host.** An MCP handler receives `(args, extra)`; `extra.authInfo.extra` is where your token validation put the user:
 
 ```ts
 const guardFor = (authInfo: { extra?: Record<string, unknown> } | undefined) =>
 	createGuard({
 		ac,
-		getActor: () =>
-			authInfo?.extra?.sub === undefined
-				? null
-				: { id: String(authInfo.extra.sub) },
+		getActor: () => (authInfo?.extra?.sub === undefined ? null : { id: String(authInfo.extra.sub) }),
 		policy: policyFor,
 	});
-```
 
-Build it where that context is in scope — inside the handler — and the tool reads like any other:
-
-```ts
 server.registerTool(
 	"publish_post",
 	{
 		description: "Publish a post the current user owns",
 		inputSchema: { id: z.string(), status: z.enum(["draft", "published"]) },
 	},
-	async (args: { id: string; status: "draft" | "published" }, extra: {
-		authInfo?: { extra?: Record<string, unknown> };
-	}) => {
+	async (args: PublishArgs, extra: { authInfo?: { extra?: Record<string, unknown> } }) => {
 		const publish = guardFor(extra.authInfo)(
 			{
 				action: "publish",
@@ -186,18 +164,27 @@ server.registerTool(
 );
 ```
 
-No `authInfo` means nobody is signed in, so `getActor` returns `null` and the guard takes its unauthenticated path rather than building a policy for a non-user.
+No `authInfo` means nobody is signed in: `getActor` returns `null`, and the guard refuses without building a policy. The Anthropic SDK's `betaTool` hands `run` no identity at all, so the tool is defined per conversation and the actor comes from the surrounding scope.
 
-The Anthropic SDK is the other case. `betaTool({ name, inputSchema, description, run })` hands `run` a context of `{ toolUse, signal }` — the tool-use block and an abort signal, **no identity at all**. There the actor comes from the surrounding scope: the tool is defined per conversation, for a user you already know.
+## Record what the agent did
 
-Either way `getActor` is a function you write. Nothing about the caller is inferred from the tool call.
+```ts
+const audited = createGuard({
+	ac,
+	getActor,
+	policy: policyFor,
+	onDecision: (decision, actor) => console.info({ actor: actor.id, ...decision }),
+});
+```
+
+Each entry names the rule that decided. `violations` show the fields the model tried to write, and `reason: "no row"` an id that matched nothing. With an environment declared, the third argument is the environment of the call.
 
 ## Why it works this way
 
-- **One policy, not a second one for agents.** An agent that gets its own rule set drifts from the UI's within a release. The guard takes the same `policyFor(actor)` the rest of the app uses.
-- **Refusals carry structure, not prose.** `action`, `resource` and per-field `violations` are data; turning them into a sentence is your call, because the wording that makes a model retry well is specific to your product.
-- **Nothing is inferred from the tool definition.** The guard never reads the tool's name or schema to guess an action or resource — you name them, because a guess here is a security decision.
+- **One policy, not a second one for agents.** A separate rule set for agents drifts from the interface's within a release.
+- **Refusals are data.** `action`, `resource` and `violations` come back structured; the wording the model reads is yours.
+- **Nothing is inferred from the tool definition.** You name the action and the resource; a guess there would be a security decision.
 
 ## Source
 
-[`guard/guard.ts`](../packages/core/src/guard/guard.ts) · [tests](../packages/core/tests/guard/guard.test.ts) · [the guard in general](./guard.md)
+[`guard/guard.ts`](../packages/core/src/guard/guard.ts) · [tests](../packages/core/tests/guard/guard.test.ts) · [the guard](./guard.md)

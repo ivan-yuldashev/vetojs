@@ -106,15 +106,14 @@ allow("read", "post", { where: { status: "archived" } });
 
 ## Core API
 
-Основной экспорт — четыре функции и один объект.
-
 - [`defineAbilities`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/define-abilities.ru.md) — единственный источник правды. Из него выводятся формы строк, действия и связи.
 - `shape<T>()` — объявляет форму ресурса. Для runtime-проверок сюда же передаётся любая схема, совместимая со [Standard Schema](https://standardschema.dev): Zod, Valibot, ArkType.
 - [`createRules(ac)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/create-rules.ru.md) — отдаёт `allow` и `deny`, сверенные с вашей схемой.
 - [`buildAbility(ac, rules)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.ru.md) — превращает плоский массив в `ability`.
-- [`parseRules(json, ac)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/parse.ru.md) — проверяет недоверенный JSON правил на границе.
-- [`markLoaded`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.ru.md) — помечает связь загруженной, когда данные собраны руками, а не ORM.
-- `ConditionOperator` — `eq`, `ne`, `in`, `nin`, `gt`, `gte`, `lt`, `lte`, `contains`, `exists`, `has`, `hasAny`, `hasAll`.
+- [`withEnv(ability, env)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.ru.md#withenv--окружение-запроса) — подставляет окружение одного запроса — час, IP, прошла ли сессия MFA, — когда в объявлениях есть `env`, а правила читают его в `when`.
+- [`parseRules(json)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/parse.ru.md) — проверяет недоверенный JSON правил на границе.
+- [`markLoaded`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.ru.md) — копия строки, собранной руками, с заданной связью.
+- `ConditionOperator` — `eq`, `ne`, `in`, `nin`, `gt`, `gte`, `lt`, `lte`, `contains`, `exists`, `has`, `hasAny`, `hasAll`; `{ ref: "field" }` на месте значения [сравнивает два поля](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/conditions.ru.md#сравнение-двух-полей) строки.
 - `ForbiddenError`, `RelationNotLoadedError` — два единственных класса в пакете.
 
 Что умеет `ability`:
@@ -156,6 +155,8 @@ import { getActor } from "./auth";
 export const withPermission = createGuard({ ac, getActor, policy: policyFor });
 ```
 
+Если объявлено `env`, конфиг принимает ещё и `getEnv`: он читает окружение каждого вызова из аргументов обёрнутой функции.
+
 Дальше каждое действие называет только две вещи: что оно делает и с каким ресурсом. Обёртка находит пользователя, загружает строку, проверяет payload и лишь потом пускает в обработчик — одинаково для server action, [HTTP-обработчика](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/http.ru.md) и [вызова инструмента агентом](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.ru.md).
 
 ```ts
@@ -173,24 +174,18 @@ const publishPost = withPermission(
 
 Обёрнутая функция сохраняет исходную сигнатуру: `(id: string) => Promise<…>`. Вызывающий код не меняется.
 
-## Предсказуемое поведение на плохих данных
+## Кривые данные и незагруженные связи
 
-В базе встречается `NULL`, а с клиента приходит текст вместо числа. Когда честно ответить на условие нельзя, движок не угадывает, а возвращает вердикт **«неизвестно»**.
+Поле не того типа, `NaN` или объект, сравниваемый по значению, дают **«неизвестно»**: `allow` ничего не разрешает, `deny` срабатывает ([операторы](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.ru.md)).
 
-Он безопасен в обе стороны: `allow` при нём ничего не разрешает, `deny` всё равно срабатывает. Плохие данные могут только сузить доступ ([подробнее об операторах](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.ru.md)).
-
-### Со связями движок строже
-
-Если правило смотрит на `post.author.role`, автор обязан быть загружен вместе с постом. Забытый `include` — это ошибка запроса, а не повод молча поменять права, поэтому `can()` не отвечает «не совпало», а **бросает** `RelationNotLoadedError`:
+Правилу, которое читает `post.author.role`, нужен загруженный автор. Без него `can()` бросает `RelationNotLoadedError`, а не отвечает «не совпало»:
 
 ```ts
 const post = await db.query.posts.findFirst({ with: { author: true } });
 ability.can("update", "post", post);
 ```
 
-Конвенция та же, что у ORM: `undefined` — связь не загружена, `null` — загружена и пуста.
-
-Если строку вы собрали не запросом, а руками — склеили из двух ответов, достали из кеша, — движку об этом надо сказать: `markLoaded(post, "author", author)` вернёт копию с пометкой «автор загружен». Без неё связь считается незагруженной, и `can()` бросит исключение ([подробнее о связях](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.ru.md)).
+`undefined` — не загружено, `null` — загружено и пусто. Строке, собранной руками, нужен ключ связи — `{ ...post, author }`, — а экземпляры классов из ORM превращают в объекты через `structuredClone` ([связи](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.ru.md)).
 
 ## Как это устроено
 

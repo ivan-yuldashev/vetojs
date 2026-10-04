@@ -67,6 +67,8 @@ export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
 
 В `rules` едет `ability.rules` — тот самый плоский массив с сервера. Если ability на клиенте уже собран, передайте `ability` вместо `rules`; вместе — нельзя, и это проверяет тип.
 
+Если [объявлено `env`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/define-abilities.ru.md#окружение-запроса), передайте фабрике `withEnv` — `createVetoContext(ac, withEnv)`, — и провайдер примет `env` рядом с `rules`. Смена любого из них перепривязывает правила, и перерисовываются только те вердикты, что изменились.
+
 ### 4. Спрячьте то, на что нет прав
 
 ```tsx

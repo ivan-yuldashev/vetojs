@@ -1,26 +1,46 @@
-# Writing policies — `createRules`
+# Rules — `createRules`
 
 **[English](create-rules.md) · [Русский](create-rules.ru.md)**
 
-`createRules(ac)` hands you `allow` and `deny` bound to your resource declarations. From there a policy is an ordinary function returning an array:
+A rule says: allow or deny this action, on this resource, for these rows, over these fields. `createRules(ac)` returns `allow` and `deny` typed against your [declarations](./define-abilities.md), and a policy is a function of the actor returning an array of them:
 
 ```ts
 import { createRules } from "@vetojs/core";
+import { ac } from "./abilities";
 
 const { allow, deny } = createRules(ac);
 
-const policyFor = (actor: User) => [
+const policyFor = (actor: { id: string }) => [
 	allow("read", "post", { where: { status: "published" } }),
-	allow(["update", "publish"], { post: ["title", "content", "status"] }, {
+	allow(["update", "publish"], { post: ["title", "status"] }, {
 		where: { authorId: actor.id },
+		values: { status: { in: ["draft"] } },
 	}),
 	deny("update", { post: ["featured"] }),
 ];
 ```
 
-Actor values are baked into the rules as plain data at build time — `actor.id` becomes a string in the condition, not a closure. The result is still serialisable JSON.
+`actor.id` is written into the rule as a value, so the result is plain JSON.
 
-## Everything is checked against your declarations
+## What a rule can say
+
+```
+allow(action, resource,             { where, when })
+allow(action, { resource: fields }, { where, values, when })
+```
+
+| Part | Answers | Checked against |
+|---|---|---|
+| `where` | which rows — [conditions](./conditions.md), [relations](./relations.md) | the row |
+| `fields`, on the target | which fields may be written; the resource alone means all of them | the incoming data |
+| `values` | which values those fields may take | the incoming data |
+| `when` | whether the rule takes part in this request — [environment](./define-abilities.md#the-requests-environment) | the request |
+
+"Bob edits his own posts" is a `where`. "Bob edits the title but not `featured`" is `fields`. "Bob sets the status, but only to `draft`" is `values`. How the last two decide a write is on [writes](./mutations.md).
+
+`action` is one action, a non-empty list, or `"manage"`: every action the resource declares, including ones added later. Write the list out when a grant should not grow with the declaration — `allow([...ac.post.actions], "post")`. `manage` appears only in rules; a check names the action it means.
+
+## Checked against your declarations
 
 ```ts
 allow("archive", "post");                               // ✗ "post" has no "archive" action
@@ -30,40 +50,42 @@ allow("read", "post", { where: { views: "many" } });    // ✗ views is a number
 allow("read", "post", { where: { title: { gt: 5 } } }); // ✗ gt isn't for strings
 ```
 
-The resource argument drives it: from `"post"` the factory infers which actions exist, what shape a row has, and which relations can be traversed.
+An empty condition or an empty action list does not compile either: an empty `where` would cover every row where it meant some, and a `deny` with nothing in it would protect nothing.
 
-## Options
+## The stored form
 
+`createRules` compiles the shorthand immediately and returns this:
+
+```ts
+type Rule = {
+	effect: "allow" | "deny";
+	action: string | [string, ...string[]];
+	resource: string;
+	where?: ConditionNode;
+	fields?: readonly [string, ...string[]];
+	values?: FieldConditionNode;
+	when?: WhenNode;
+};
 ```
-allow(action, resource,             { where })
-allow(action, { resource: fields }, { where, values })
-//             ^^^^^^^^^^^^^^^^^^     ^^^^^  ^^^^^^
-//             which fields           which  which values
-//             (the resource alone    rows   those fields
-//              means all of them)           may take
-```
 
-`where` accepts the nested shorthand described in [conditions](./conditions.md) and [relations](./relations.md); `values` accepts the flat field shorthand ([condition shorthand](./condition-shorthand.md)). Both are compiled to plain JSON immediately, so what you get back is data, not a builder.
+It survives `JSON.stringify`, a database and the network unchanged. Read it back through [`parseRules`](./parse.md).
 
-## Rules carry proof of where they came from
-
-`buildAbility` accepts only rules that went through a check — either these factories (verified by the compiler) or [`parseRules`](./parse.md) (verified at runtime). A hand-written rule literal will not compile:
+`buildAbility` takes only rules that passed a check — these factories or `parseRules` — so a hand-written literal does not compile:
 
 ```ts
 buildAbility(ac, [{ effect: "allow", action: "read", resource: "post" }]); // ✗
 ```
 
-This is a type-level marker with no runtime cost. It exists so that the validation step for rules arriving from a database or network cannot be quietly skipped. When you genuinely need to bypass it — building deliberately broken rules in a test — a visible `as CheckedRules` cast is the escape hatch.
+A test that needs a deliberately broken rule writes `as CheckedRules`.
 
 ## One rule per role, not per tenant
 
-A policy usually walks the actor's memberships. Emitting the same rules once per membership is the obvious shape and the expensive one — the array grows with the number of workspaces, and it is that array that crosses to the client on every render.
+Emitting the same rules once per membership makes the array grow with the tenant count, and that array crosses to the client:
 
 ```ts
 // ✗ one copy of every rule per workspace
-actor.memberships.flatMap(({ workspaceId, role }) => [
+actor.memberships.flatMap(({ workspaceId }) => [
 	allow("read", "post", { where: { blog: { workspace: { id: workspaceId } } } }),
-	// …
 ]);
 
 // ✓ one rule, naming the workspaces the role covers
@@ -74,14 +96,14 @@ const writer = actor.memberships
 allow("read", "post", { where: { blog: { workspace: { id: { in: writer } } } } });
 ```
 
-Same verdicts, and the size stops tracking the tenant count. On the example policy with an actor in 50 workspaces, **338 rules and 64 kB of JSON become 13 rules and 4 kB**, and `can()` on one post drops from 1.8 µs to 0.72 µs. Group by whatever your rules actually branch on — usually the role — and let `in` carry the ids. The measurement is a script: `pnpm --filter @vetojs-examples/drizzle-pg exec tsx src/policy-shape.ts`.
+The verdicts are the same. For an actor in 50 workspaces, 338 rules and 64 kB of JSON become 13 rules and 4 kB.
 
 ## Why it works this way
 
-- **Pure factories, no builder.** `allow` and `deny` construct a value and return it; a policy is a `map` over your role logic. Trivial to test, trivial to serialise.
-- **The shorthand is compiled at construction**, so the stored rule is always the plain form. Nothing shorthand-shaped ever reaches the engine or the database.
-- **`createRules` takes the `ac` value, not just its type**, because compiling `where` needs to know at runtime which keys are relations and which are fields.
+- **A policy is data.** Testing it is comparing arrays; shipping it is `JSON.stringify`.
+- **`createRules` takes `ac` as a value**, because compiling `where` needs to know at runtime which keys are relations.
+- **A field is named by a non-empty string.** A write carries string keys, so a symbol or numeric key could never match.
 
 ## Source
 
-[`create/create-rules.ts`](../packages/core/src/create/create-rules.ts) · [tests](../packages/core/tests/create/create-rules.test.ts)
+[`create/create-rules.ts`](../packages/core/src/create/create-rules.ts) · [`model/rule.ts`](../packages/core/src/model/rule.ts) · [tests](../packages/core/tests/create/create-rules.test.ts)

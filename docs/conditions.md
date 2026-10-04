@@ -2,66 +2,89 @@
 
 **[English](conditions.md) · [Русский](conditions.ru.md)**
 
-A rule's `where` is a small tree: comparisons at the leaves, `and` / `or` / `not` in between, and relation nodes that step into related resources. This page covers how that tree is evaluated against a row.
-
-You normally write conditions in shorthand and never see the tree:
+A condition is a plain object: keys are fields, values are what to compare against.
 
 ```ts
 allow("update", "post", {
 	where: {
-		status: "draft",
-		author: { id: actor.id },
-		or: [{ views: { lt: 100 } }, { pinned: true }],
+		status: "draft",                           // equals
+		views: { lt: 100 },                        // an operator
+		authorId: { in: [actor.id, "u2"] },
+		or: [{ pinned: true }, { featured: true }],
+		author: { role: "admin" },                 // a relation
 	},
 });
 ```
 
-Sibling keys mean **and**. The shorthand compiles to the tree below at rule-construction time, so the stored rule is plain JSON — see [condition shorthand](./condition-shorthand.md).
+Sibling keys mean **and**; `and`, `or` and `not` group explicitly. A key naming a [relation](./relations.md) steps into the related row.
 
-## The node types
+## Operators by field type
+
+| Field | Operators |
+|---|---|
+| any scalar | `eq ne in nin exists`, and a bare value for `eq` |
+| `number`, `Date` | also `gt gte lt lte` |
+| `string` | also `contains` |
+| array of scalars | `has hasAny hasAll exists` |
+| object, or array of objects | `exists` |
+
+Only these type-check, one operator per field. What each does on `null`, wrong types and `NaN` is on [operators](./operators.md).
+
+An array field is asked about its members — `{ tags: { has: "release" } }`. A bare array, `{ tags: ["a"] }`, does not compile: a whole array never compares to anything.
+
+## Comparing two fields
+
+Put `{ ref }` in place of a value to compare two fields of the same row, under `eq`, `ne`, `gt`, `gte`, `lt` or `lte`:
 
 ```ts
-type ConditionNode<T> =
-	| { field: keyof T; op: ConditionOperator; value: unknown }
-	| { relation: string; type: "one" | "many"; match?: MatchQuantifier; where: ConditionNode<T> }
-	| { and: ConditionNode<T>[] }
-	| { or: ConditionNode<T>[] }
-	| { not: ConditionNode<T> };
+const ac = defineAbilities({
+	resources: { invoice: { schema: shape<{ spent: number; limit: number }>(), actions: ["update"] } },
+});
+const { allow } = createRules(ac);
+
+allow("update", "invoice", { where: { spent: { lte: { ref: "limit" } } } });
+// stored as { field: "spent", op: "lte", ref: "limit" }
 ```
 
-| Node | Holds when |
-|---|---|
-| `field` | the comparison holds — see [operators](./operators.md) |
-| `relation` | the related row(s) satisfy the nested condition — see [relations](./relations.md) |
-| `and` | every child holds |
-| `or` | at least one child holds |
-| `not` | the inner node does not hold |
+The types offer only fields of a matching type; inside a relation both fields belong to the related row. When either side is missing, `null` or `NaN`, the answer is unknown — the way SQL answers `spent <= limit` with a `NULL` on either side — so `can()` and the compiled `WHERE` agree. `ref` is allowed in `where` only.
 
-An empty `and` holds (nothing to violate); an empty `or` does not (nothing to satisfy). That makes `{ and: [] }` the "always" node and `{ or: [] }` the "never" node — which is how the compiler expresses *no constraint* and *impossible* respectively.
+## The stored tree
 
-## Three states, not two
+The shorthand is compiled when the rule is built, and the rule stores this:
 
-A node doesn't answer just yes/no — it can also answer **unknown** when the data is incoherent with the condition (a wrong-typed field, a corrupt relation item). The combinators propagate it the way three-valued logic requires:
+```ts
+type ConditionNode =
+	| { field: string; op: string; value: unknown }
+	| { field: string; op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte"; ref: string }
+	| { relation: string; type: "one"; where: ConditionNode }
+	| { relation: string; type: "many"; match: "some" | "every" | "none"; where: ConditionNode }
+	| { and: ConditionNode[] }
+	| { or: ConditionNode[] }
+	| { not: ConditionNode };
+```
 
-| | result |
-|---|---|
-| `and` | **no** if any child is no; otherwise **unknown** if any is unknown; else yes |
-| `or` | **yes** if any child is yes; otherwise **unknown** if any is unknown; else no |
-| `not` | flips yes/no, leaves unknown alone |
+A `Date` is stored as epoch milliseconds so the rule stays JSON, and a `Date` from your ORM still compares against it. `ability.where()` uses `{ and: [] }` for "every row" and `{ or: [] }` for "no row".
 
-The point is the last row: `not` cannot turn unknown into yes. A `deny` wrapped in a negation can't be disarmed by feeding it garbage. [Rule evaluation](./rule-evaluation.md) explains what the engine does with the final unknown.
+## Yes, no or unknown
 
-## What can throw
+A condition answers yes, no, or **unknown** when the data does not fit it — a wrong-typed field, a corrupt relation. `and` is no if any part is no, `or` is yes if any part is yes; otherwise an unknown part makes the whole unknown. `not` leaves unknown as it is, so wrapping a `deny` in `not` does not let bad data through. What a decision does with unknown is on [rule evaluation](./rule-evaluation.md#when-the-data-doesnt-fit).
 
-Almost nothing. Evaluation is synchronous, pure, and total: unrecognised nodes and unknown operators fail closed rather than crash.
+## Where each form is allowed
 
-The single exception is a **relation the rule needs but you never loaded** — that throws `RelationNotLoadedError`, because silently treating missing data as "doesn't match" is how row leaks happen. See [relations](./relations.md).
+| | fields | `and` | `or` / `not` | relations | `ref` |
+|---|---|---|---|---|---|
+| `where` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `values` — [writes](./mutations.md) | ✓ | ✓ | — | — | — |
+| `when` — [environment](./define-abilities.md#the-requests-environment) | ✓ | ✓ | ✓ | — | — |
+
+A forbidden value is a `deny` with `values`, not an `or` / `not` inside a constraint.
 
 ## Why it works this way
 
-- **Branches are recognised by key presence** (`"and" in node`), mirroring the type-level union. The first shape a node names wins, so a node must carry exactly one — [`parseRules`](./parse.md) refuses a node naming two, which would otherwise have half of it silently dropped. A node matching no known shape falls through to operator evaluation, and an unrecognised operator answers **unknown**: an `allow` grants nothing, a `deny` still fires.
-- **All branches are evaluated, even after the answer is settled.** A `deny` whose first branch already matched still walks the rest — so an unloaded relation anywhere in the tree is reported rather than hidden by evaluation order. Diagnostics stay deterministic; the cost is a full walk of conditions that are, in practice, a handful of nodes.
+- **Compiled at construction.** The engine, the SQL adapter and the database all see one plain tree.
+- **A bare value means `eq`**, because that is the common case.
+- **A node carries exactly one shape.** [`parseRules`](./parse.md) refuses a node naming both a field and `and`, which a reader would otherwise half-drop.
 
 ## Source
 
-[`compile/matcher.ts`](../packages/core/src/compile/matcher.ts) · [tests](../packages/core/tests/compile/matcher.test.ts) · type: [`model/condition.ts`](../packages/core/src/model/condition.ts)
+[`create/where-input.ts`](../packages/core/src/create/where-input.ts) · [`create/condition-shorthand.ts`](../packages/core/src/create/condition-shorthand.ts) · [`model/condition.ts`](../packages/core/src/model/condition.ts) · [tests](../packages/core/tests/create/where-input.test.ts)

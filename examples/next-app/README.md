@@ -25,14 +25,14 @@ The form is therefore literally different per role, from one policy and no branc
 
 | | writable fields | picking `published` |
 |---|---|---|
-| **bob** (editor) | `title`, `status` | refused — `constraints: { status: { in: ["draft"] } }` |
+| **bob** (editor) | `title`, `status` | refused — `values: { status: { in: ["draft"] } }` |
 | **alice** (admin) | `title`, `status`, `authorId` | allowed, and she can hand the post to another author |
 
 Alice gets the extra input because her `allow("manage", "post", …)` names no `payload` at all, so it restricts no field; bob's rule names `fields: ["title", "status"]`, so `authorId` never reaches his DOM.
 
 The **submit status=published anyway** button then forges a payload past the disabled control, and the server action — wrapped in `withPermission({ action, resource, load, payload })`, consumed with `useActionState` — runs the identical check and answers with the identical violation. Forge `authorId` as bob instead and you get the other kind, `authorId: field not permitted`: fields and values are refused separately, and neither refusal depends on the form. Same rules, same call, two places: one for UX, one for the boundary.
 
-**Shape and permission are different questions, and both reach the screen.** `post` is declared with a Zod schema rather than `type<Post>()`, so `ability.validate` does real work: the handler checks the resulting row and hands Zod's own message back to the form. Type a two-character title — no rule forbids it, so the save button stays live and the client-side check passes — and the answer is `a title needs at least 3 characters`, from Zod, not a 403.
+**Shape and permission are different questions, and both reach the screen.** `post` is declared with a Zod schema rather than `shape<Post>()`, so `ability.validate` does real work: the handler checks the resulting row and hands Zod's own message back to the form. Type a two-character title — no rule forbids it, so the save button stays live and the client-side check passes — and the answer is `a title needs at least 3 characters`, from Zod, not a 403.
 
 The order matters and is deliberate: the guard authorises first, `validate` runs inside the handler. A row you may not touch never gets shape feedback, so the schema cannot be used as an oracle for rows you cannot see.
 
