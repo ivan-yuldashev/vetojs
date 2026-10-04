@@ -1,5 +1,280 @@
 # @vetojs/core
 
+## 1.0.0
+
+### Major Changes
+
+- fc6a79f: **`AbilitySet` is now `Ability`, and `DecisionReport` is now `Decision`.** Only the type names change:
+  
+  ```diff
+  -import type { AbilitySet, DecisionReport } from "@vetojs/core";
+  +import type { Ability, Decision } from "@vetojs/core";
+  ```
+  
+  **A target's field list may be read-only**, so a target written once with `as const` can be reused across rules: `allow("update", titleOnly)` where `const titleOnly = { post: ["title"] } as const`. `Rule["fields"]` is typed `readonly` to match.
+- fc6a79f: **`authorize` without a row refuses what only a row could settle.** It passes when an `allow` with no `where` covers the action and no `deny` reads the row; an `allow` conditioned on rows, or a `deny` that could fire on one, now throws `ForbiddenError`. `can` and `cannot` without a row stay optimistic.
+  
+  `canMutate` without a row answers the same way, so a permission conditioned on rows no longer grants a create. A guarded action with neither `load` nor `payload` is checked the same way too.
+  
+  Such a refusal names no rule in `onDecision`: a condition speaks about a row, so without one no rule refused. A `deny` that fires is still named, one that fires on data it could not compare in the row it was given included.
+  
+  Pass the row wherever the operation touches one:
+  
+  ```diff
+  -ability.authorize("update", "post");
+  +ability.authorize("update", "post", post);
+  ```
+- fc6a79f: **`Awaitable` and `UseCan` are no longer exported.** `Awaitable` from `@vetojs/core/guard` was `T | Promise<T>`; write the union where you named it. The type of the `useCan` hook comes from the context that returns it:
+  
+  ```diff
+  -import type { UseCan } from "@vetojs/react";
+  -type CanHook = UseCan<typeof ac>;
+  +import type { VetoContext } from "@vetojs/react";
+  +type CanHook = VetoContext<typeof ac>["useCan"];
+  ```
+- fc6a79f: **An empty condition is refused by the compiler alone.** A to-many relation in `where` names at least one of `some`, `every` and `none`: `where: { comments: {} }` no longer compiles.
+- fc6a79f: **A rule names at least one field, each by a non-empty string.** The `Rule` type now says so: a hand-written `Rule` with `fields: []` no longer compiles, as `allow("update", { post: [] })` already did not. A field is a string key of the resource's shape other than `""` — a numeric or symbol key could never match a write, whose keys are strings. `parseRules` refuses an empty field name, as it refuses an empty action or resource name, and `permittedFields` takes string field names only.
+  
+  A list built at runtime has to be shown non-empty before it becomes a rule:
+  
+  ```ts
+  const [first, ...rest] = editable;
+  
+  if (first !== undefined) {
+  	rules.push(allow("update", { post: [first, ...rest] }));
+  }
+  ```
+- fc6a79f: **`type` is gone; the shape declaration is `shape`.** It was deprecated as an alias and the two were the same function, so the change is the name:
+  
+  ```diff
+  -import { defineAbilities, type } from "@vetojs/core";
+  -schema: type<Post>()
+  +import { defineAbilities, shape } from "@vetojs/core";
+  +schema: shape<Post>()
+  ```
+  
+  The old name collided with the TypeScript `type` modifier, so an import line carrying both read like a typo and sorters ordered it differently between runs.
+  
+  **Every message the Drizzle adapter throws now begins `veto:`, as the engine's always did.** One string finds them all in a log:
+  
+  ```diff
+  -@vetojs/drizzle: column "authorId" does not exist in posts.
+  +veto: column "authorId" does not exist in posts.
+  ```
+- fc6a79f: **Fields move to the resource, and a rule carries them itself.** The `payload` container is gone: a rule names the resource, or the resource with the fields it covers, and the two conditions sit together in the options.
+  
+  ```diff
+  -allow("update", "post", {
+  -  where: { authorId: user.id },
+  -  payload: {
+  -    fields: ["title", "status"],
+  -    constraints: { status: { in: ["draft"] } },
+  -  },
+  -});
+  +allow("update", { post: ["title", "status"] }, {
+  +  where:  { authorId: user.id },
+  +  values: { status: { in: ["draft"] } },
+  +});
+  
+  -deny("update", "post", { payload: { fields: ["featured"] } });
+  +deny("update", { post: ["featured"] });
+  ```
+  
+  The resource alone still means every field, so `allow("read", "post", { where })` is unchanged.
+  
+  **Rules stored as JSON change shape.** `payload.fields` becomes `fields` and `payload.constraints` becomes `values`, both on the rule:
+  
+  ```diff
+   {
+     "effect": "allow", "action": "update", "resource": "post",
+     "where": { "field": "authorId", "op": "eq", "value": "u1" },
+  -  "payload": {
+  -    "fields": ["status"],
+  -    "constraints": { "field": "status", "op": "in", "value": ["draft"] }
+  -  }
+  +  "fields": ["status"],
+  +  "values": { "field": "status", "op": "in", "value": ["draft"] }
+   }
+  ```
+  
+  `parseRules` refuses a rule that still carries `payload` rather than reading past it, so a stored policy from an older build fails loudly instead of losing what its payload said.
+  
+  **`RulePayload` is gone.** `Rule` carries `fields` and `values` directly.
+  
+  **More is settled by the compiler.** The target ties the action, the resource and the fields together: an action the resource does not declare, a field it does not have, an empty field list, and two resources in one rule are all type errors. A permission's `values` stand on the fields it names — a value on a field outside the target could never be reached — while a prohibition's `values` and `fields` subtract independently, so it may name either or both.
+  
+  `validatePayload`, `PayloadResult` and the guard's `payload` option are unchanged: they are about the data being written, not about what a rule says.
+- fc6a79f: **`manage` is written in a rule, never asked.** `can`, `cannot`, `authorize` and every other question take an action the resource declares; `can("manage", "post")` no longer compiles, and neither does `<Can I="manage">`, `useCan("manage", …)`, a guarded action named `manage` or `schema.filter(ability, "manage", …)`. A question about `manage` that gets past the types is refused.
+  
+  Asked, `manage` could only say whether some rule reads `manage`: `true` for an owner denied `delete`, `false` for someone granted every action one by one. Ask about the action you mean:
+  
+  ```diff
+  -ability.can("manage", "post");
+  +ability.can("update", "post");
+  ```
+  
+  `ActionFor` still includes `manage` and types what a rule names; `DeclaredAction` types what a question names.
+  
+  **A rule names at least one action.** `allow([], "post")` and `deny([], "post")` no longer compile, nor does a `Rule` written with `action: []`, and `parseRules` refuses one — an empty list matched nothing, so such a `deny` protected nothing. `parseRules` also refuses an empty action or resource name.
+- fc6a79f: **`createRules` takes the declarations alone.** The `maxDepth` option is gone: `and`, `or`, `not` and relations nest as deep as you write them.
+  
+  ```diff
+  -const { allow, deny } = createRules(ac, { maxDepth: 5 });
+  +const { allow, deny } = createRules(ac);
+  ```
+  
+  **A relation in `where` refuses a value that is not a condition.** `{ status: "draft", comments: 5 }` used to compile to a condition no row meets, so an `allow` granted nothing and a `deny` never fired; it now throws. Only reachable from JavaScript or through a cast — the types have always said otherwise.
+- fc6a79f: **`validatePayload` takes the whole row, or `undefined` when there is none.** It took `Partial<ShapeOf<AC, R>>` for both the row and the data — one type, two adjacent parameters — so handing them over in the other order compiled, and the answer flipped:
+  
+  ```ts
+  // policy: edit `title` only on your own posts
+  ability.validatePayload("update", "post", foreignRow, patch);  // { ok: false }
+  ability.validatePayload("update", "post", patch, foreignRow);  // { ok: true }  ← compiled
+  ```
+  
+  The row condition was judged by the payload, which the caller supplies, and the row's contents were approved as the write. The two now have different types, and the swap does not compile.
+  
+  ```diff
+  -ability.validatePayload("create", "post", {}, data);
+  +ability.validatePayload("create", "post", undefined, data);
+  ```
+  
+  `undefined` is how `can` and `canMutate` already say "no row", and it replaces `{}` as the create spelling. Behaviour is unchanged: the field and value levels answer, while an `allow` conditioned on rows cannot be shown to apply and grants nothing.
+  
+  **A partially filled candidate is no longer accepted as the row.** Passing the record you are about to insert made row conditions judge data the caller assembled — the same confusion the swap exploited, and the opposite of what the documentation promises: that row conditions are not evaluated against something that does not exist yet. Pass `undefined`; the levels that can answer still do.
+- 94d92fe: **`permittedFields` takes the row.** The answer is the one `validatePayload` gives for each field of that row, so a field a `deny` takes away from this particular row drops out of the list. Pass `undefined` when the row is not at hand: the answer is then optimistic, as it is for `can`, and `validatePayload` refuses what the row turns out to forbid.
+  
+  ```diff
+  -ability.permittedFields("update", "post", ["title", "status"]);
+  +ability.permittedFields("update", "post", post, ["title", "status"]);
+  ```
+- fc6a79f: **`parseRules` checks the shape, and nothing else.** The second argument is gone, and with it `toVocabulary`, the `Vocabulary` type, the `unknown` report and `UnknownRule`. What a resource, an action or a relation is called is answered by the compiler where rules are written, and by generating them from the same declarations where they arrive from outside — a check after the fact reports drift, generation prevents it. Rules and the build reading them have to come from the same generation.
+  
+  `parseRules(json)` now returns checked rules on its own, so the call `buildAbility` accepts is one argument shorter:
+  
+  ```diff
+  -const result = parseRules(JSON.parse(raw), toVocabulary(ac));
+  +const result = parseRules(JSON.parse(raw));
+  ```
+  
+  Reading `result.unknown` no longer compiles; delete the branch. A rule naming something this build lacks is no longer dropped: an unknown resource or action simply matches nothing, and an unknown relation throws `RelationNotLoadedError` on the check that reaches it.
+  
+  **A condition that says nothing does not compile.** `where: {}`, `{ and: [] }`, `{ or: [] }`, an empty node nested inside a group, an empty negation or relation, `values: {}` and an empty field list are type errors in `allow` and `deny`, and `parseRules` rejects the same shapes arriving as JSON:
+  
+  ```diff
+  -allow("read", "post", { where: {} });
+  +allow("read", "post");
+  ```
+  
+  `where: {}` is refused with `Property '"veto: a condition has to name at least one field, relation or group"' is missing in type '{}'`.
+  
+  Write the condition, or leave the key out. A rule carrying an empty one covered every row where it meant to cover some, and a `deny` naming no field protected nothing.
+
+### Minor Changes
+
+- aabe66a: **A condition can compare two fields of the same row.** Write `{ ref }` in place of a value under `eq`, `ne`, `gt`, `gte`, `lt` or `lte`:
+  
+  ```ts
+  allow("update", "invoice", { where: { spent: { lte: { ref: "limit" } } } });
+  ```
+  
+  It compiles to `{ "field": "spent", "op": "lte", "ref": "limit" }`. The types offer only fields of the same row whose type matches; inside a relation both fields are the related row's. When either side is missing, `null` or `NaN`, the answer is unknown — an `allow` grants nothing and a `deny` stands — which is how SQL answers `spent <= limit` with a `NULL` on either side, so `can()` and `where()` agree.
+  
+  `parseRules` accepts `ref` only in `where`, only under those six operators, and only in place of a value. `@vetojs/drizzle` translates it into a comparison of the two columns.
+  
+  The browser bundle that parses rules grows by about 170 B gzip, the bundle on trusted rules by about 30 B.
+- 2589d22: **A rule can depend on the request's environment.** Declare what it carries, write `when` on a rule, and bind the environment of one request with `withEnv`:
+  
+  ```ts
+  const ac = defineAbilities({
+  	env: shape<{ hour: number; mfa: boolean }>(),
+  	resources: { invoice: { schema: shape<Invoice>(), actions: ["read", "delete"] } },
+  });
+  
+  const { allow, deny } = createRules(ac);
+  const policy = [
+  	allow("read", "invoice", { when: { hour: { gte: 9 } } }),
+  	allow("delete", "invoice"),
+  	deny("delete", "invoice", { when: { mfa: { ne: true } } }),
+  ];
+  
+  const ability = withEnv(buildAbility(ac, policy), { hour: 14, mfa: session.mfa });
+  ```
+  
+  An `allow` takes part only when its `when` holds; a `deny` stays unless its `when` fails. A key the environment lacks answers unknown, so a missing value never lifts a prohibition. `can` and `where()` on one binding read the same environment, and binding again to an environment with the same keys and values hands back the same ability.
+  
+  With an `env` declared, `buildAbility` returns an `AbilityForEnv`, which answers nothing until `withEnv` binds it. Where no environment is bound — an app without `env` reading rules with `when` — an `allow` with `when` grants nothing and a `deny` with `when` stands. `parseRules` checks `when` as a condition with no relations.
+  
+  `createGuard` takes `getEnv`, required when the declarations name an `env`. It receives the wrapped function’s arguments, runs alongside `getActor`, and every check of the call and `ctx.ability` read the environment it returns. `onDecision` gets the environment as its third argument.
+  
+  With an `env` declared, `createVetoContext(ac, withEnv)` takes `withEnv`, and `AbilityProvider` takes `rules` together with the `env` to bind them to. A change of either rebinds, the rules set through `useSetRules` included, and `useCan` and `<Can>` re-render only when their answer flips. `withEnv` is passed in rather than imported, so an app without an environment does not carry it.
+  
+  Code that never imports `withEnv` builds and checks as fast as before; the browser bundle on trusted rules grows by about 40 B gzip, and the React provider by about 90 B.
+- fc6a79f: **The checked-rule mark cannot be written by hand.** `CheckedRule` carried `"~veto.checked": true`, and `true` is something anyone can type — a literal spelling that key compiled straight into `buildAbility`, past the gate the mark exists to hold. The value is now a symbol this module does not export, so the mark cannot be spelled at all:
+  
+  ```diff
+   buildAbility(ac, [
+  -  { effect: "allow", action: "read", resource: "post", "~veto.checked": true },
+   ]);
+  ```
+  
+  The message when a rule is not checked is the one it always was — `Property '"~veto.checked"' is missing` — and reaching past the gate on purpose is what it always was too: a visible `as CheckedRules`. Nothing is written at runtime; the mark is still phantom.
+- fc6a79f: **`parseRules` refuses a comparison against a value its operator cannot compare.** `contains` takes a string, and `gt`, `gte`, `lt` and `lte` take a number or a string. Anything else — `null`, an object, a boolean, a list — is reported with its path and the rule is quarantined, as a non-array for `in` or a non-boolean for `exists` already is. Correct such a rule where it is stored.
+- fc6a79f: **A symbol cannot name a field, and saying so is now a refusal rather than a silence.** `Object.entries` does not see symbol keys, so `where: { authorId: actor.id, [tag]: "x" }` used to compile to the first condition alone — the rule widened, quietly, to every row the dropped key would have excluded. Creating it now throws:
+  
+  ```
+  veto: where names Symbol(tag) — a rule outlives JSON and a symbol does not,
+  so the key would be dropped and the rule would widen. Name the field with a string.
+  ```
+  
+  `values` refuses one the same way.
+  
+  **The types refuse it too, and refuse a numeric key with it.** A `where` key was checked against `WhereKeys & string` in one place and against the raw `WhereKeys` in another, so a shape declaring `{ [tag]: string }` or `{ 1: string }` let a rule name that key. Both are compile errors now, in either spelling:
+  
+  ```diff
+  -schema: shape<{ 1: string; title: string }>()
+  +schema: shape<{ "1": string; title: string }>()
+  ```
+  
+  A rule is JSON and a JSON key is a string. Spell a numeric field name as a string in the shape and it works as it always did at runtime, where `{ 1: "x" }` and `{ "1": "x" }` were never two different keys.
+
+### Patch Changes
+
+- fc6a79f: **`parseRules` judges a rule by the keys it carries, not by what it inherits.** Under a polluted `Object.prototype`, a rule was accepted on keys it did not own: `{}` passed as a whole rule when `effect`, `action` and `resource` sat on the prototype, a condition of `{ value: "…" }` passed as a field test, and a relation passed without stating its cardinality. Every key a rule or a condition is judged by — `effect`, `action`, `resource`, `field`, `op`, `type`, `match` — is now read off the object itself, as `value` and `where` already were.
+  
+  **A condition naming no shape says that, instead of being read as a field.** `where: {}` used to report three things a field condition lacks; it now names what the node could have carried:
+  
+  ```diff
+  -rules[0].where.field: expected a string
+  -rules[0].where.op: unknown operator undefined
+  -rules[0].where.value: missing
+  +rules[0].where: a condition names none of "and" | "or" | "not" | "relation" | "field" — a node carries exactly one shape
+  ```
+- fc6a79f: `createRules` no longer checks at runtime whether a `where` it is handed is a condition it compiled earlier. The types refuse one already: pass the shorthand you wrote, or send the whole rule through `parseRules`.
+  
+  An operator left `undefined` is refused under the key it sits on — `values.status.eq is undefined` — where the message used to read `where.eq` whatever the rule key and the field.
+- fc6a79f: `buildAbility` reads `onDecision` only as an own property of its options, so a polluted `Object.prototype.onDecision` hears no decision.
+- fc6a79f: A to-many relation whose list has holes — `[ , comment]` — reads as corrupt data, the same as a list holding `undefined`: an `allow` grants nothing and a `deny` fires. The check no longer throws a `TypeError` on it.
+- fc6a79f: `parseRules` refuses a hole in the rule list or in an `and` / `or` — `[ , rule]` — and reports it at its index, as it does for any other entry that is not a rule or a condition. Such a list used to pass, and `buildAbility` then threw a `TypeError` on the first check.
+- fc6a79f: **The row is called a row everywhere.** The same value was named `instance` in `can`, `cannot`, `authorize` and `markLoaded` and `row` in `canMutate` and `validatePayload`, sometimes in one paragraph. It is `row` now — in parameter names across both packages, `useCan` and both `<Can>` included, in the documentation, and in the message `RelationNotLoadedError` carries:
+  
+  ```diff
+  -Relation "author" is referenced by a condition but is not loaded on the instance.
+  +Relation "author" is referenced by a condition but is not loaded on the row.
+  ```
+  
+  An alert matching that string needs the new wording. Nothing else changes: parameter names are not part of a call, and no behaviour moved.
+- fc6a79f: **`validatePayload` raises a missing include instead of answering without it.** When a rule's condition reaches a relation that was not loaded, the call now throws `RelationNotLoadedError` — the answer `can` and `canMutate` have always given. Until now a prohibition that matched earlier could settle the call first and the missing relation went unseen, so one policy and one row produced a throw from `canMutate` and a plain `{ ok: false }` from `validatePayload`: a refusal that reads as "the policy says no" where the truth was "there was not enough data to decide".
+  
+  Load the relations a policy names before calling `validatePayload` on its own — the same ones `can` has always needed.
+  
+  **A condition stops reading a relation a field already ruled out.** `{ status: "published", blog: { workspace: { id } } }` used to walk `blog` even for a draft, because a relation had to be read whatever the order of evaluation. That guarantee now stands before matching begins, so the walk happens once and the condition short-circuits like any other.
+- fc6a79f: **`ability.rules` is no longer frozen at runtime.** The type has always refused to have it changed — `readonly CheckedRule[]` rejects `push`, index assignment and reassignment — and the engine reads a copy of its own, so nothing done to the array it hands back can move a verdict. The freeze added a `TypeError` on top of that, and only for the harmless half: appending to the array never changed an answer, while editing a rule object in place can, and a shallow freeze never stopped that.
+  
+  A policy that changed is a new `buildAbility`, as it always was. If you were relying on the throw from JavaScript, the answer is the same call.
+- fc6a79f: `onDecision` hears `reason: "not a plain row"` from `validatePayload` too, when the row it was handed is an object the engine will not read — a class instance from an ORM, a `Date`, an array — as it already did from `can`, `authorize` and `canMutate`.
+- fc6a79f: **`markLoaded` writes the relation name as a key on the copy.** A relation called `__proto__` replaced the copy's prototype instead of adding a key to it, so the value was invisible to `Object.keys` and `JSON.stringify` while every plain object read it through inheritance. The copy now carries the name as its own key and keeps the prototype it had.
+
 ## 0.12.0
 
 ### Minor Changes
