@@ -2,24 +2,23 @@
 
 **[English](for-agents.md) · [Русский](for-agents.ru.md)**
 
-Everything needed to write correct Veto code, in one page. If you are generating code for someone else's project, read this first — the last section lists the mistakes that look plausible and are wrong.
+Everything needed to write correct veto code, on one page. The last section lists mistakes that look plausible and are wrong.
 
 ## Install
 
 ```sh
-npm install @vetojs/core          # the engine
-npm install @vetojs/react         # optional: <Can>, useAbility, AbilityProvider
-# the guard ships inside @vetojs/core, under @vetojs/core/guard
+npm install @vetojs/core            # the engine; the guard is @vetojs/core/guard
+npm install @vetojs/react           # optional: <Can>, useCan, useAbility
+npm install @vetojs/drizzle         # optional: the policy as a SQL WHERE
 ```
 
-ESM only, Node 22+. `@vetojs/core` is a peer dependency of both bindings, so install it alongside them rather than relying on it being pulled in. `@vetojs/react` needs React 18+ as a peer as well.
+ESM only, Node 20+. `@vetojs/core` is a peer dependency of the other two; React 18+.
 
 ## The whole flow
 
 ```ts
 import { defineAbilities, shape, createRules, buildAbility } from "@vetojs/core";
 
-// 1. Declare the resource schema once. Every type below is inferred from this.
 const ac = defineAbilities({
 	resources: {
 		post: {
@@ -31,7 +30,6 @@ const ac = defineAbilities({
 	},
 });
 
-// 2. A policy is a pure function of the actor returning an array of rules.
 const { allow, deny } = createRules(ac);
 
 const policyFor = (user: { id: string }) => [
@@ -40,65 +38,88 @@ const policyFor = (user: { id: string }) => [
 	deny("update", { post: ["featured"] }),
 ];
 
-// 3. Build once per request, then check access.
-const ability = buildAbility(ac, policyFor(currentUser));
-
+const ability = buildAbility(ac, policyFor(currentUser)); // once per request
 ability.can("update", "post", post);
 ```
 
-## API surface
-
-### `@vetojs/core`
+## `@vetojs/core`
 
 | Export | Signature | Purpose |
 |---|---|---|
-| `defineAbilities` | `({ resources }) => AC` | declares resources, actions, relations. `schema` is optional: leave it out for a resource with no rows — a screen, a report — and its shape is empty, so no row and no field comparison type-check |
-| `shape<T>()` | `() => Schema<T>` | carries a row shape and checks nothing at runtime. Pass a Zod / Valibot / ArkType schema instead and `ability.validate` starts checking data — the shape is then inferred from it. **Not Yup**: its Standard Schema implementation is async, and an async schema throws |
+| `defineAbilities` | `({ resources, env? }) => AC` | resources, actions, relations; `env: shape<E>()` declares what a rule's `when` reads. `schema` is optional for a resource with no rows |
+| `shape<T>()` | `() => Schema<T>` | a type only. A Zod / Valibot / ArkType schema instead makes `validate` check data; not Yup — it is async |
 | `createRules` | `(ac) => { allow, deny }` | typed rule factories |
-| `buildAbility` | `(ac, rules) => Ability` | turns a policy into the object you call |
-| `parseRules` | `(json) => RuleParseResult` | validates the shape of untrusted rule JSON |
-| `markLoaded` | `(row, relation, value) => row` | states a relation is loaded |
-| `"manage"` | action name | the wildcard: an `allow("manage", "post")` grants every action `post` declares, **including ones added later**. Write the list out instead — `allow([...ac.post.actions], "post")` — when the grant should be a snapshot. Rules only: a question names a declared action, and `can("manage", …)` does not compile |
-| `ConditionOperator` | const object | `eq ne in nin gt gte lt lte contains exists has hasAny hasAll` |
-| `ForbiddenError` | class | `.action`, `.resource`, `.violations?`; recognise it with `ForbiddenError.is(error)`, not `instanceof` |
+| `buildAbility` | `(ac, rules) => Ability` | the object you ask. With `env` declared it returns an `AbilityForEnv` with nothing to ask until bound |
+| `withEnv` | `(ability, env) => Ability` | binds one request's environment; equal keys and values return the same ability |
+| `parseRules` | `(json) => { ok: true, rules } \| { ok: false, errors }` | checks the shape of untrusted rule JSON |
+| `markLoaded` | `(row, relation, value) => row` | a copy with the relation set; `null` for loaded-but-empty |
+| `ForbiddenError` | class | `.action`, `.resource`, `.violations?`; test with `ForbiddenError.is(error)` |
 | `RelationNotLoadedError` | class | `.relation` |
+| `ConditionOperator` | const object | the thirteen operators, for code that walks `where()` |
 
-Methods on `ability`:
-
-| Method | Returns | Use for |
+| `ability` method | Returns | Use for |
 |---|---|---|
-| `can(action, resource, row?)` | `boolean` | branching. **Without a row the answer is optimistic** — true when some `allow` covers the action and no blanket `deny` overrides it — which is what a render decision needs before a row exists |
+| `can(action, resource, row?)` | `boolean` | branching. Without a row: could it be allowed for some row |
 | `cannot(action, resource, row?)` | `boolean` | early exits |
-| `authorize(action, resource, row?)` | `void`, throws `ForbiddenError` | server boundaries. **Without a row it does not guess** — it passes only when an `allow` with no `where` covers the action and no `deny` reads the row |
-| `canMutate(action, resource, row)` | `boolean` | may this row be written |
+| `authorize(action, resource, row?)` | `void`, throws `ForbiddenError` | boundaries. Without a row it passes only an `allow` with no `where`, and no `deny` may read the row |
+| `canMutate(action, resource, row)` | `boolean` | may this row be written; `undefined` for a create |
 | `validatePayload(action, resource, row, data)` | `{ ok: true, data } \| { ok: false, violations }` | may this data be written |
-| `permittedFields(action, resource, row, fields)` | subset of `fields` | driving a form |
-| `where(action, resource)` | `ConditionNode` | database filter |
-| `validate(resource, data)` | `{ ok: true, value } \| { ok: false, issues }` | schema check; each issue is `{ message, path? }`, where `path` is the field the schema blamed |
-| `rules` | `CheckedRules` | ship to the client |
+| `permittedFields(action, resource, row, fields)` | subset of `fields` | a form |
+| `where(action, resource)` | `ConditionNode` | a database filter |
+| `validate(resource, data)` | `{ ok: true, value } \| { ok: false, issues }` | schema check |
+| `rules` | `CheckedRules` | send to the client |
 
-### `@vetojs/react`
+`"manage"` in a rule means every action of the resource, including ones added later; a check never names it. `buildAbility(ac, rules, { onDecision })` reports every decision — see [ability](./ability.md#recording-decisions).
 
-**In a server component, use the server entry — no provider, no context, nothing shipped to the browser:**
-
-```tsx
-import { Can } from "@vetojs/react/server";
-
-const ability = await getAbility();
-
-<Can ability={ability} I="update" a="post" this={post} fallback={<ReadOnly />}>
-	<EditForm post={post} />
-</Can>
-```
-
-For client components, call the factory once:
+## Writing conditions
 
 ```ts
-// src/veto.ts — call the factory once, import bindings from here
+where: {
+	status: "published",                  // eq
+	views: { gte: 100 },                  // number, Date: gt gte lt lte
+	title: { contains: "release" },       // string
+	authorId: { in: ["u1", "u2"] },
+	deletedAt: { exists: false },
+	tags: { has: "release" },             // array field: has | hasAny | hasAll
+	spent: { lte: { ref: "limit" } },     // another field of the same row
+	author: { role: "admin" },            // to-one relation
+	comments: { none: { spam: true } },   // to-many: some | every | none
+	or: [{ pinned: true }, { views: { gt: 1000 } }],
+}
+```
+
+Sibling keys are ANDed, one operator per field. A wrong-typed value, `NaN` or an object compared by value answers **unknown**: an `allow` grants nothing, a `deny` fires. `null` or a missing field is a plain no. `values` takes fields and `and` only; `when` takes fields of the environment and groups, no relations.
+
+## Guarding an entry point
+
+```ts
+import { createGuard } from "@vetojs/core/guard";
+import { ac, policyFor } from "./abilities";
+import { getActor } from "./auth";
+
+const withPermission = createGuard({ ac, getActor, policy: policyFor });
+
+const publish = withPermission(
+	{
+		action: "publish",
+		resource: "post",
+		load: (args: { id: string; status: "draft" | "published" }) => loadPost(args.id),
+		payload: (args: { id: string; status: "draft" | "published" }) => ({ status: args.status }),
+	},
+	async (ctx) => `published ${ctx.row.id}`,
+);
+```
+
+The same wrapper guards a server action, an HTTP handler and a tool call; the wrapped function keeps its signature. `ctx.row` is what `load` returned (an empty `load` is refused), `ctx.payload` the validated data. With `env` declared, `createGuard` also takes `getEnv(...args)`. For a tool with no table — mail, a payment — `load` builds the row from the arguments; without a row an `allow` with a `where` grants nothing. A refusal throws `ForbiddenError`; put `error.violations` into the tool's result so the model can fix its arguments. See [agents](./agents.md).
+
+## `@vetojs/react`
+
+```ts
+// src/authz.ts — call the factory once, import from here
 import { createVetoContext } from "@vetojs/react";
 import { ac } from "./abilities";
-export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
-	createVetoContext(ac);
+
+export const { AbilityProvider, useAbility, useCan, useSetRules, Can } = createVetoContext(ac);
 ```
 
 ```tsx
@@ -109,92 +130,28 @@ export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
 </AbilityProvider>
 ```
 
-| Binding | Use it for |
+| Binding | Use for |
 |---|---|
-| `Can` from `@vetojs/react/server` | gating a server component; takes `ability` directly |
-| `<Can>` from the factory | gating a client component |
-| `useCan(action, resource, row?)` | one verdict; re-renders only when that answer flips |
-| `useAbility()` | anything beyond yes/no — `permittedFields`, `validate`, filtering a list |
-| `useSetRules()` | switching actors on the client without re-rendering the page |
+| `Can` from `@vetojs/react/server` | a server component; takes `ability`, ships nothing to the browser |
+| `<Can>` from the factory | a client component |
+| `useCan(action, resource, row?)` | one verdict, re-rendering only when it flips |
+| `useAbility()` | `permittedFields`, filtering a list, several checks |
+| `useSetRules()` | switching actors without re-rendering the page |
 
-### `@vetojs/core/guard`
-
-`createGuard({ ac, getActor, policy })` returns `withPermission(options, handler)`. It knows no framework — the same wrapper guards a server action, an HTTP handler and an agent's tool call. Declare `load` for the row and `payload` for what is being written; the handler runs only if both pass. `ctx.payload` is the validated copy, and `ctx.row` is a row rather than a maybe-row whenever `load` is declared. See [the guide](./guard.md).
-
-A resource is a noun in the vocabulary, not a table, so an effect with nothing to fetch — sending mail, writing a file, calling a webhook, charging a card — is guarded the same way: `load` builds the row out of the arguments, deriving the fields the policy judges (`recipientDomain`, not the raw address). Skipping `load` there is a mistake: without a row an `allow` with a `where` grants nothing, and a conditional `deny` refuses every call. See [guarding what an agent does](./agents.md).
-
-## Writing conditions
-
-Sibling keys are ANDed. A bare value means equals.
-
-```ts
-where: {
-	status: "published",                  // eq
-	views: { gte: 100 },                  // operator object
-	title: { contains: "release" },       // strings only
-	authorId: { in: ["u1", "u2"] },
-	deletedAt: { exists: false },
-	tags: { has: "release" },             // array field: has | hasAny | hasAll
-	author: { role: "admin" },            // to-one relation
-	comments: { none: { spam: true } },   // to-many: some | every | none
-	or: [{ pinned: true }, { views: { gt: 1000 } }],
-}
-```
-
-Operators are offered by field type, and the type system rejects the rest:
-
-| Field | Operators |
-|---|---|
-| any scalar | `eq ne in nin exists`, plus a bare value for `eq` |
-| `number`, `Date` | also `gt gte lt lte` |
-| `string` | also `contains` |
-| array of scalars | `has` (one member), `hasAny`, `hasAll`, `exists` — **not** `eq` or `in` |
-| object, or array of objects | `exists` only |
-
-The last two rows are the ones worth remembering: an array field takes `has` / `hasAny` / `hasAll`, and anything non-scalar can only be tested for presence, because comparing it by value is always unknown.
-
-## Checking writes
-
-Two questions, kept separate:
-
-```ts
-if (!ability.canMutate("update", "post", row)) throw new ForbiddenError("update", "post");
-
-const result = ability.validatePayload("update", "post", row, data);
-if (!result.ok) return badRequest(result.violations); // [{ field, reason }]
-
-await db.update(posts).set(result.data).where(eq(posts.id, row.id));
-```
-
-Use `result.data`, not the raw input — it is the validated copy.
+With `env` declared: `createVetoContext(ac, withEnv)`, and the provider takes `env` beside `rules`.
 
 ## Filtering in the database
 
 ```ts
-const filter = ability.where("read", "post"); // a plain condition tree
+const rows = await db.select().from(posts)
+	.where(schema.filter(ability, "read", "post", eq(posts.id, id)));
 ```
 
-The filter selects exactly the rows `can()` allows. Hand it to a database adapter; without an adapter, treat it as data — do not try to interpret it by hand.
-
-With `@vetojs/drizzle`, compile and compose in one call — your own predicates go after the resource and narrow the result alongside the policy:
-
-```ts
-db.select().from(posts).where(schema.filter(ability, "read", "post", eq(posts.id, id)));
-```
-
-## Rules from outside
-
-```ts
-const result = parseRules(JSON.parse(raw));
-if (!result.ok) throw new Error(result.errors.join("\n"));
-const ability = buildAbility(ac, result.rules);
-```
-
-`buildAbility` expects rules that passed a check — from `createRules` or from `parseRules`. The type system enforces this wherever the value still has a type (see the note below about `any`).
+`schema` comes from `defineTables(ac, { post: posts, … })` in `@vetojs/drizzle`. The filter selects exactly the rows `can()` allows; extra predicates only narrow it. Without an adapter, treat `ability.where()` as data.
 
 ## Emitting rules as JSON
 
-When you are producing a policy rather than calling one — filling an admin UI, writing to a database — emit the stored form and let the gate check it. The gate checks the shape; the names are on you, so generate them from the same declarations the reading build uses.
+When you produce a policy rather than call one — for an admin UI or a database — emit the stored form and check it:
 
 ```ts
 const proposed = [
@@ -211,70 +168,32 @@ const proposed = [
 const result = parseRules(proposed);
 ```
 
-One failure mode: `ok: false` means the shape is wrong, and every error carries a path, like `rules[0].where.op: unknown operator "regex"`. Fix and retry.
-
-Names are not one of the things it answers. An invented action or resource passes the gate and then matches nothing — an `allow` grants nothing, a `deny` protects nothing — and an invented relation throws on the first check that reaches it. Emit names from the declarations, not from memory.
-
-**One shape per node.** A condition node names exactly one of `and` / `or` / `not` / `relation` / a field. Writing a field *and* an `and` in the same object is rejected — nothing merges them, and the reader would take one and drop the other.
+`ok: false` lists errors with paths, like `rules[0].where.op: unknown operator "regex"`. Names are not checked: an invented action or resource passes and then matches nothing, an invented relation throws on the first check. Take names from the declarations. A node names exactly one of a field, `and`, `or`, `not`, `relation`.
 
 ## Mistakes to avoid
 
-These compile-or-look fine and are wrong:
-
-**A bare array on an array field.** It compares against that array, and a comparison against an array or an object is always **unknown** — it grants nothing and fires every `deny`. The type rejects it; reach for a membership operator instead.
+**A bare array on an array field.**
 
 ```ts
-where: { tags: ["a", "b"] }             // ✗ rejected by the type system
-where: { tags: { in: ["a", "b"] } }     // ✗ `in` is for scalar fields, not array ones
-where: { tags: { has: "release" } }     // ✓ this member is present
-where: { tags: { hasAny: ["a", "b"] } } // ✓ at least one of them
-where: { tags: { hasAll: ["a", "b"] } } // ✓ all of them
+where: { tags: ["a", "b"] }             // ✗ does not type-check
+where: { tags: { in: ["a", "b"] } }     // ✗ `in` is for scalar fields
+where: { tags: { hasAny: ["a", "b"] } } // ✓
 ```
 
-**Passing raw JSON to `buildAbility`.** Always go through `parseRules(json, ac)`.
+**Raw JSON into `buildAbility`.** `buildAbility(ac, JSON.parse(raw))` compiles — `JSON.parse` returns `any` — and skips the check. Go through `parseRules`, then pass `result.rules` when `result.ok`.
 
-```ts
-buildAbility(ac, JSON.parse(raw));                       // ✗ compiles, but unchecked
-buildAbility(ac, parseRules(JSON.parse(raw), ac).rules); // ✓
-```
+**The row-less check as a row guard.** `can("update", "post")` is true if *some* post may be updated. Pass the row whenever the operation touches one.
 
-Note the comment: this one **does** compile, because `JSON.parse` returns `any`. The type system rejects a hand-written literal or a plain `Rule[]`, but nothing can catch a value that discarded its type. Do not rely on the compiler here.
+**A relation the rule reads, not loaded.** `can()` throws `RelationNotLoadedError`. Load it — `with: { author: true }` — and convert ORM class instances with `structuredClone`.
 
-**Using the row-less check as a row guard.** `can("update", "post")` answers *could this be allowed for some row* — it is for rendering decisions, not for guarding an operation on a specific row. `authorize("update", "post")` refuses rather than guess, so the same mistake there is a 403 for an actor who may update only their own posts. If you have the row, pass it.
+**Validating shape with the guard.** It checks permissions, not schemas; validate arguments separately.
 
-**Forgetting to load a relation the rule needs.** If a rule reads `post.author.role`, the author must be on the object, or `can()` throws `RelationNotLoadedError`. Load it in the query:
+**A hidden button as protection.** The server checks every action.
 
-```ts
-const post = await db.query.posts.findFirst({ with: { author: true } });
-```
+**`instanceof ForbiddenError`.** Two copies of the package break it; use `ForbiddenError.is(error)`.
 
-For hand-assembled objects use `markLoaded(post, "author", author)`; pass `null` for loaded-but-empty. Passing `undefined` throws — that is what "not loaded" means.
-
-**Treating a hidden button as protection.** `<Can>` and `permittedFields` decide what to render. The request they hide can still be sent by hand, so the server needs its own check every time.
-
-**Expecting a deny to step aside on bad data.** A `deny` fires on "unknown" — a wrong-typed value cannot slip past a prohibition. Malformed data can only ever narrow access, never widen it.
-
-**Reaching for a config option to change precedence.** Deny always wins and everything not allowed is denied; neither is configurable. That is what lets the same rules compile to SQL.
-
-**Catching the refusal with `instanceof`.** Write `ForbiddenError.is(error)`. Two copies of `@vetojs/core` in one dependency tree give the error two class identities, and `instanceof` then answers `false` for a perfectly valid refusal — turning a 403 into a 500, silently.
-
-```ts
-catch (error) {
-	if (error instanceof ForbiddenError) { … }  // ✗ breaks on a duplicate copy
-	if (ForbiddenError.is(error)) { … }         // ✓ matches on a registered symbol
-}
-```
-
-## Framework placement
-
-| Where | What to use |
-|---|---|
-| Server component / route handler | `buildAbility` per request, then `can` / `authorize` |
-| Fetching a list | `ability.where(...)` in the query, never filter in JS after the fact |
-| Mutation handler | `canMutate` + `validatePayload` |
-| Client component | `<AbilityProvider rules={ability.rules}>` and `<Can>` / `useAbility` |
-| Crossing server → client | send `ability.rules`; it is plain JSON |
+**Looking for an option to change precedence.** A `deny` always wins and everything not allowed is denied; that is what makes the SQL filter exact.
 
 ## Full documentation
 
-Per-concept pages, English and Russian, are indexed in [docs/README.md](./README.md).
+Per-concept pages, English and Russian: [docs/README.md](./README.md).

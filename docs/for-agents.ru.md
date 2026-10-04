@@ -2,24 +2,23 @@
 
 **[English](for-agents.md) · [Русский](for-agents.ru.md)**
 
-Всё, что нужно, чтобы написать корректный код на Veto, — на одной странице. Если вы генерируете код для чужого проекта, начните отсюда: в последнем разделе собраны ошибки, которые выглядят правдоподобно, но неверны.
+Всё, что нужно, чтобы писать правильный код на veto, — на одной странице. В последнем разделе — ошибки, которые выглядят правдоподобно, но неверны.
 
 ## Установка
 
 ```sh
-npm install @vetojs/core          # движок
-npm install @vetojs/react         # по желанию: <Can>, useAbility, AbilityProvider
-# гвард лежит внутри @vetojs/core, под @vetojs/core/guard
+npm install @vetojs/core            # движок; гвард — @vetojs/core/guard
+npm install @vetojs/react           # по желанию: <Can>, useCan, useAbility
+npm install @vetojs/drizzle         # по желанию: политика как SQL WHERE
 ```
 
-Только ESM, Node 22+. `@vetojs/core` — peer-зависимость обеих привязок, поэтому ставьте его рядом с ними, а не рассчитывайте, что он подтянется сам. Для `@vetojs/react` нужен ещё React 18+ как peer.
+Только ESM, Node 20+. `@vetojs/core` — peer-зависимость двух других пакетов; React 18+.
 
-## Весь путь целиком
+## Весь путь
 
 ```ts
 import { defineAbilities, shape, createRules, buildAbility } from "@vetojs/core";
 
-// 1. Опишите схему ресурсов один раз. Все типы ниже выводятся отсюда.
 const ac = defineAbilities({
 	resources: {
 		post: {
@@ -31,7 +30,6 @@ const ac = defineAbilities({
 	},
 });
 
-// 2. Политика — чистая функция от пользователя, возвращающая массив правил.
 const { allow, deny } = createRules(ac);
 
 const policyFor = (user: { id: string }) => [
@@ -40,66 +38,88 @@ const policyFor = (user: { id: string }) => [
 	deny("update", { post: ["featured"] }),
 ];
 
-// 3. Соберите на запрос — и проверяйте доступ.
-const ability = buildAbility(ac, policyFor(currentUser));
-
+const ability = buildAbility(ac, policyFor(currentUser)); // один раз на запрос
 ability.can("update", "post", post);
 ```
 
-## Поверхность API
+## `@vetojs/core`
 
-### `@vetojs/core`
-
-| Экспорт | Сигнатура | Зачем |
+| Экспорт | Сигнатура | Назначение |
 |---|---|---|
-| `defineAbilities` | `({ resources }) => AC` | объявляет ресурсы, действия и связи. `schema` необязательна: у ресурса без строк — экрана, отчёта — её не пишут, форма получается пустой, и ни строка, ни сравнение по полю не проходят по типам |
-| `shape<T>()` | `() => Schema<T>` | несёт форму строки и в рантайме не проверяет ничего. Передайте вместо неё схему Zod / Valibot / ArkType — и `ability.validate` начнёт проверять данные, а форма выведется из схемы. **Не Yup**: его реализация Standard Schema асинхронная, а асинхронная схема бросает исключение |
+| `defineAbilities` | `({ resources, env? }) => AC` | ресурсы, действия, связи; `env: shape<E>()` объявляет то, что читает `when` правила. У ресурса без строк `schema` не пишут |
+| `shape<T>()` | `() => Schema<T>` | только тип. Схема Zod / Valibot / ArkType вместо него заставит `validate` проверять данные; не Yup — он асинхронный |
 | `createRules` | `(ac) => { allow, deny }` | типизированные фабрики правил |
-| `buildAbility` | `(ac, rules) => Ability` | превращает политику в объект, который вы вызываете |
-| `parseRules` | `(json, vocabulary) => RuleParseResult` | проверяет недоверенный JSON с правилами |
-
-| `markLoaded` | `(row, relation, value) => row` | сообщает, что связь загружена |
-| `"manage"` | имя действия | wildcard: `allow("manage", "post")` даёт все действия, объявленные у `post`, **включая те, что появятся позже**. Когда нужен снимок, перечислите явно — `allow([...ac.post.actions], "post")`. Только в правилах: вопрос называет объявленное действие, и `can("manage", …)` не компилируется |
-| `ConditionOperator` | объект-константа | `eq ne in nin gt gte lt lte contains exists has hasAny hasAll` |
-| `ForbiddenError` | класс | `.action`, `.resource`, `.violations?`; опознавать через `ForbiddenError.is(error)`, а не `instanceof` |
+| `buildAbility` | `(ac, rules) => Ability` | объект, у которого спрашивают. Если объявлено `env`, возвращает `AbilityForEnv`, у которого нечего спросить до привязки |
+| `withEnv` | `(ability, env) => Ability` | привязывает окружение одного запроса; те же ключи и значения возвращают тот же ability |
+| `parseRules` | `(json) => { ok: true, rules } \| { ok: false, errors }` | проверяет форму недоверенного JSON правил |
+| `markLoaded` | `(row, relation, value) => row` | копия с заданной связью; `null` — загружено, но пусто |
+| `ForbiddenError` | класс | `.action`, `.resource`, `.violations?`; проверяйте через `ForbiddenError.is(error)` |
 | `RelationNotLoadedError` | класс | `.relation` |
+| `ConditionOperator` | константный объект | тринадцать операторов — для кода, который обходит `where()` |
 
-Методы `ability`:
-
-| Метод | Возвращает | Для чего |
+| Метод `ability` | Возвращает | Для чего |
 |---|---|---|
-| `can(action, resource, row?)` | `boolean` | ветвление. **Без строки ответ оптимистичный** — истина, когда есть покрывающий `allow` и нет глухого `deny`, — и это ровно то, что нужно решению о рендере, пока строки ещё нет |
+| `can(action, resource, row?)` | `boolean` | ветвление. Без строки: может ли быть разрешено для какой-нибудь строки |
 | `cannot(action, resource, row?)` | `boolean` | ранний выход |
-| `authorize(action, resource, row?)` | `void`, бросает `ForbiddenError` | границы на сервере. **Без строки не гадает** — пропускает, только когда действие покрыто `allow` без `where` и ни один `deny` строку не читает |
-| `canMutate(action, resource, row)` | `boolean` | можно ли писать в эту строку |
+| `authorize(action, resource, row?)` | `void`, бросает `ForbiddenError` | границы. Без строки пропускает только `allow` без `where`, и ни один `deny` не должен смотреть в строку |
+| `canMutate(action, resource, row)` | `boolean` | можно ли писать в эту строку; при создании — `undefined` |
 | `validatePayload(action, resource, row, data)` | `{ ok: true, data } \| { ok: false, violations }` | можно ли записать эти данные |
-| `permittedFields(action, resource, row, fields)` | подмножество `fields` | для формы |
+| `permittedFields(action, resource, row, fields)` | подмножество `fields` | форма |
 | `where(action, resource)` | `ConditionNode` | фильтр для базы |
-| `validate(resource, data)` | `{ ok: true, value } \| { ok: false, issues }` | проверка по схеме; каждая проблема — `{ message, path? }`, где `path` — поле, на которое указала схема |
-| `rules` | `CheckedRules` | отправить клиенту |
+| `validate(resource, data)` | `{ ok: true, value } \| { ok: false, issues }` | проверка по схеме |
+| `rules` | `CheckedRules` | отправить на клиент |
 
-### `@vetojs/react`
+`"manage"` в правиле означает все действия ресурса, включая добавленные позже; проверка его не называет. `buildAbility(ac, rules, { onDecision })` сообщает о каждом решении — см. [ability](./ability.ru.md#журнал-решений).
 
-**В серверном компоненте берите серверную точку входа — ни провайдера, ни контекста, в браузер не уезжает ничего:**
-
-```tsx
-import { Can } from "@vetojs/react/server";
-
-const ability = await getAbility();
-
-<Can ability={ability} I="update" a="post" this={post} fallback={<ReadOnly />}>
-	<EditForm post={post} />
-</Can>
-```
-
-Для клиентских компонентов вызовите фабрику один раз:
+## Как писать условия
 
 ```ts
-// src/veto.ts — вызовите фабрику один раз, импортируйте привязки отсюда
+where: {
+	status: "published",                  // eq
+	views: { gte: 100 },                  // number, Date: gt gte lt lte
+	title: { contains: "release" },       // string
+	authorId: { in: ["u1", "u2"] },
+	deletedAt: { exists: false },
+	tags: { has: "release" },             // поле-массив: has | hasAny | hasAll
+	spent: { lte: { ref: "limit" } },     // другое поле той же строки
+	author: { role: "admin" },            // связь «один к одному»
+	comments: { none: { spam: true } },   // «один ко многим»: some | every | none
+	or: [{ pinned: true }, { views: { gt: 1000 } }],
+}
+```
+
+Соседние ключи объединяются через AND, по одному оператору на поле. Значение не того типа, `NaN` или объект, сравниваемый по значению, дают **«неизвестно»**: `allow` ничего не разрешает, `deny` срабатывает. `null` или пропавшее поле — просто «нет». `values` принимает только поля и `and`; `when` — поля окружения и группы, без связей.
+
+## Охрана входной точки
+
+```ts
+import { createGuard } from "@vetojs/core/guard";
+import { ac, policyFor } from "./abilities";
+import { getActor } from "./auth";
+
+const withPermission = createGuard({ ac, getActor, policy: policyFor });
+
+const publish = withPermission(
+	{
+		action: "publish",
+		resource: "post",
+		load: (args: { id: string; status: "draft" | "published" }) => loadPost(args.id),
+		payload: (args: { id: string; status: "draft" | "published" }) => ({ status: args.status }),
+	},
+	async (ctx) => `published ${ctx.row.id}`,
+);
+```
+
+Одна и та же обёртка охраняет server action, HTTP-обработчик и вызов инструмента; обёрнутая функция сохраняет сигнатуру. `ctx.row` — то, что вернул `load` (пустой `load` получает отказ), `ctx.payload` — проверенные данные. Если объявлено `env`, `createGuard` принимает ещё и `getEnv(...args)`. Для инструмента без таблицы — письмо, платёж — `load` собирает строку из аргументов; без строки `allow` с `where` ничего не разрешает. Отказ бросает `ForbiddenError`; положите `error.violations` в результат инструмента, чтобы модель исправила аргументы. См. [агенты](./agents.ru.md).
+
+## `@vetojs/react`
+
+```ts
+// src/authz.ts — вызовите фабрику один раз, импортируйте отсюда
 import { createVetoContext } from "@vetojs/react";
 import { ac } from "./abilities";
-export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
-	createVetoContext(ac);
+
+export const { AbilityProvider, useAbility, useCan, useSetRules, Can } = createVetoContext(ac);
 ```
 
 ```tsx
@@ -112,90 +132,26 @@ export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
 
 | Привязка | Для чего |
 |---|---|
-| `Can` из `@vetojs/react/server` | закрыть серверный компонент; принимает `ability` напрямую |
-| `<Can>` из фабрики | закрыть клиентский компонент |
-| `useCan(action, resource, row?)` | один вердикт; перерисовка только когда меняется этот ответ |
-| `useAbility()` | всё сверх «да/нет» — `permittedFields`, `validate`, фильтрация списка |
-| `useSetRules()` | смена пользователя на клиенте без перерисовки страницы |
+| `Can` из `@vetojs/react/server` | серверный компонент; принимает `ability`, в браузер ничего не уходит |
+| `<Can>` из фабрики | клиентский компонент |
+| `useCan(action, resource, row?)` | один вердикт, перерисовка только при его смене |
+| `useAbility()` | `permittedFields`, фильтрация списка, несколько проверок |
+| `useSetRules()` | смена пользователя без перерисовки страницы |
 
-### `@vetojs/core/guard`
-
-`createGuard({ ac, getActor, policy })` возвращает `withPermission(options, handler)`. Фреймворков он не знает — та же обёртка охраняет server action, HTTP-обработчик и вызов инструмента агентом. Опишите `load` для строки и `payload` для записываемых данных; обработчик выполнится, только если пройдут обе проверки. В `ctx.payload` окажется проверенная копия, а `ctx.row` при объявленном `load` — строка, а не «может быть строка». См. [руководство](./guard.ru.md).
-
-Ресурс — существительное словаря, а не таблица, поэтому эффект, которому нечего загружать — письмо, запись файла, вебхук, списание с карты, — охраняется так же: `load` собирает строку из аргументов, выводя поля, по которым судит политика (`recipientDomain`, а не сырой адрес). Пропустить `load` здесь — ошибка: без строки `allow` с `where` ничего не даёт, а условный `deny` откажет всем вызовам. См. [охрану действий агента](./agents.ru.md).
-
-## Как писать условия
-
-Соседние ключи объединяются через И. Голое значение означает «равно».
-
-```ts
-where: {
-	status: "published",                  // eq
-	views: { gte: 100 },                  // объект с оператором
-	title: { contains: "release" },       // только для строк
-	authorId: { in: ["u1", "u2"] },
-	deletedAt: { exists: false },
-	tags: { has: "release" },             // поле-массив: has | hasAny | hasAll
-	author: { role: "admin" },            // связь «к одному»
-	comments: { none: { spam: true } },   // «ко многим»: some | every | none
-	or: [{ pinned: true }, { views: { gt: 1000 } }],
-}
-```
-
-Операторы предлагаются по типу поля, остальное система типов отклоняет:
-
-| Поле | Операторы |
-|---|---|
-| любой скаляр | `eq ne in nin exists`, плюс голое значение как `eq` |
-| `number`, `Date` | ещё `gt gte lt lte` |
-| `string` | ещё `contains` |
-| массив скаляров | `has` (один элемент), `hasAny`, `hasAll`, `exists` — **не** `eq` и не `in` |
-| объект или массив объектов | только `exists` |
-
-Запомнить стоит две последние строки: поле-массив принимает `has` / `hasAny` / `hasAll`, а всё нескалярное можно проверить только на наличие — сравнение по значению всегда даёт «неизвестно».
-
-## Проверка записи
-
-Два вопроса, которые держат раздельно:
-
-```ts
-if (!ability.canMutate("update", "post", row)) throw new ForbiddenError("update", "post");
-
-const result = ability.validatePayload("update", "post", row, data);
-if (!result.ok) return badRequest(result.violations); // [{ field, reason }]
-
-await db.update(posts).set(result.data).where(eq(posts.id, row.id));
-```
-
-Пишите `result.data`, а не исходный ввод: это проверенная копия.
+Если объявлено `env`: `createVetoContext(ac, withEnv)`, а провайдер принимает `env` рядом с `rules`.
 
 ## Фильтрация в базе
 
 ```ts
-const filter = ability.where("read", "post"); // обычное дерево условий
+const rows = await db.select().from(posts)
+	.where(schema.filter(ability, "read", "post", eq(posts.id, id)));
 ```
 
-Фильтр отбирает ровно те строки, которые разрешил бы `can()`. Передайте его адаптеру базы; без адаптера считайте это данными и не пытайтесь разбирать дерево вручную.
+`schema` получают из `defineTables(ac, { post: posts, … })` в `@vetojs/drizzle`. Фильтр выбирает ровно те строки, что разрешает `can()`; дополнительные предикаты только сужают. Без адаптера обращайтесь с `ability.where()` как с данными.
 
-С `@vetojs/drizzle` компиляция и склейка делаются одним вызовом: свои условия идут после ресурса и сужают выборку вместе с политикой:
+## Правила в виде JSON
 
-```ts
-db.select().from(posts).where(schema.filter(ability, "read", "post", eq(posts.id, id)));
-```
-
-## Правила извне
-
-```ts
-const result = parseRules(JSON.parse(raw));
-if (!result.ok) throw new Error(result.errors.join("\n"));
-const ability = buildAbility(ac, result.rules);
-```
-
-`buildAbility` ждёт проверенные правила — от `createRules` либо от `parseRules`. Система типов следит за этим везде, где у значения ещё есть тип (см. оговорку про `any` ниже).
-
-## Как выдавать правила в JSON
-
-Когда вы не вызываете политику, а составляете её — заполняете админку, пишете в базу, — выдавайте хранимую форму и отдавайте её на проверку шлюзу. Дверь проверяет форму; имена — на вас, поэтому порождайте их из тех же объявлений, которые читает принимающая сборка.
+Когда вы порождаете политику, а не вызываете её, — для админки или базы, — выдавайте хранимую форму и проверяйте её:
 
 ```ts
 const proposed = [
@@ -212,70 +168,32 @@ const proposed = [
 const result = parseRules(proposed);
 ```
 
-Отказ здесь один: `ok: false` значит, что неверна форма, и у каждой ошибки есть путь, вида `rules[0].where.op: unknown operator "regex"`. Исправить и повторить.
+`ok: false` перечисляет ошибки с путями, например `rules[0].where.op: unknown operator "regex"`. Имена не проверяются: выдуманное действие или ресурс проходит и потом ничему не соответствует, выдуманная связь бросает исключение на первой же проверке. Берите имена из объявлений. Узел называет ровно одно из: поле, `and`, `or`, `not`, `relation`.
 
-Имена дверь не проверяет. Придуманное действие или ресурс её пройдут и дальше ни с чем не совпадут — `allow` не даст ничего, `deny` ничего не защитит, — а придуманная связь бросит на первой же проверке, которая до неё дойдёт. Порождайте имена из объявлений, а не по памяти.
+## Ошибки, которых стоит избегать
 
-**У узла ровно одна форма.** Узел условия называет что-то одно: `and`, `or`, `not`, `relation` или поле. Поле и `and` в одном объекте будут отклонены — их никто не объединяет, читатель взял бы одно и потерял другое.
-
-## Чего делать не надо
-
-Всё перечисленное выглядит правдоподобно и при этом неверно.
-
-**Голый массив у поля-массива.** Он сравнивается с этим массивом, а сравнение с массивом или объектом всегда даёт **«неизвестно»**: оно ничего не разрешает и заставляет сработать любой `deny`. Типы это отклоняют — берите оператор вхождения.
+**Голый массив на поле-массиве.**
 
 ```ts
-where: { tags: ["a", "b"] }             // ✗ типы отклонят
-where: { tags: { in: ["a", "b"] } }     // ✗ `in` — для скалярных полей, не для массивов
-where: { tags: { has: "release" } }     // ✓ этот элемент есть
-where: { tags: { hasAny: ["a", "b"] } } // ✓ хотя бы один из них
-where: { tags: { hasAll: ["a", "b"] } } // ✓ все сразу
+where: { tags: ["a", "b"] }             // ✗ не проходит по типам
+where: { tags: { in: ["a", "b"] } }     // ✗ `in` — для скалярных полей
+where: { tags: { hasAny: ["a", "b"] } } // ✓
 ```
 
-**Передавать сырой JSON в `buildAbility`.** Всегда идите через `parseRules(json, ac)`.
+**Сырой JSON в `buildAbility`.** `buildAbility(ac, JSON.parse(raw))` компилируется — `JSON.parse` возвращает `any` — и пропускает проверку. Идите через `parseRules` и передавайте `result.rules`, когда `result.ok`.
 
-```ts
-buildAbility(ac, JSON.parse(raw));                       // ✗ скомпилируется, но без проверки
-buildAbility(ac, parseRules(JSON.parse(raw), ac).rules); // ✓
-```
+**Проверка без строки вместо проверки строки.** `can("update", "post")` — «да», если можно править *какой-нибудь* пост. Передавайте строку, если операция её касается.
 
-Обратите внимание на комментарий: этот вызов **скомпилируется**, потому что `JSON.parse` возвращает `any`. Типы отклонят литерал или обычный `Rule[]`, но значение, потерявшее свой тип, поймать нечем. Полагаться здесь на компилятор нельзя.
+**Связь, которую читает правило, не загружена.** `can()` бросает `RelationNotLoadedError`. Загрузите её — `with: { author: true }` — а экземпляры классов из ORM превратите в объекты через `structuredClone`.
 
-**Использовать проверку без строки как защиту строки.** `can("update", "post")` отвечает на вопрос *возможно ли это хоть для какой-то строки*. Это для решений об отрисовке, а не для защиты операции над конкретной строкой. `authorize("update", "post")` вместо догадки отказывает, поэтому та же ошибка с ним обернётся 403 для того, кому можно менять только свои посты. Если строка есть — передайте её.
+**Проверка формы гвардом.** Он проверяет права, а не схемы; аргументы валидируйте отдельно.
 
-**Забыть загрузить связь, которая нужна правилу.** Если правило читает `post.author.role`, автор должен лежать на объекте, иначе `can()` бросит `RelationNotLoadedError`. Загружайте в запросе:
+**Спрятанная кнопка вместо защиты.** Сервер проверяет каждое действие.
 
-```ts
-const post = await db.query.posts.findFirst({ with: { author: true } });
-```
+**`instanceof ForbiddenError`.** Две копии пакета его ломают; пишите `ForbiddenError.is(error)`.
 
-Для объектов, собранных руками, есть `markLoaded(post, "author", author)`; для «загружено и пусто» передавайте `null`. Передача `undefined` бросает исключение — именно это и означает «не загружено».
+**Поиск опции, меняющей приоритет.** `deny` всегда побеждает, а всё, что не разрешено, запрещено; именно поэтому фильтр в SQL точен.
 
-**Считать скрытую кнопку защитой.** `<Can>` и `permittedFields` решают, что отрисовать. Запрос, который они прячут, всё равно можно отправить руками, поэтому на сервере нужна своя проверка каждый раз.
+## Вся документация
 
-**Ждать, что `deny` отступит на плохих данных.** Запрет срабатывает и на «неизвестно»: значение неверного типа мимо него не проскользнёт. Битые данные способны только сузить доступ, но не расширить.
-
-**Искать настройку, чтобы поменять приоритет.** Запрет всегда сильнее, а всё неразрешённое запрещено; ни то ни другое не настраивается. Именно это позволяет тем же правилам компилироваться в SQL.
-
-**Ловить отказ через `instanceof`.** Пишите `ForbiddenError.is(error)`. Две копии `@vetojs/core` в дереве зависимостей дают ошибке две идентичности класса, и тогда `instanceof` отвечает `false` на совершенно законный отказ, тихо превращая 403 в 500.
-
-```ts
-catch (error) {
-	if (error instanceof ForbiddenError) { … }  // ✗ ломается на второй копии
-	if (ForbiddenError.is(error)) { … }         // ✓ сверяется по зарегистрированному символу
-}
-```
-
-## Куда что класть
-
-| Место | Что использовать |
-|---|---|
-| Серверный компонент, route handler | `buildAbility` на запрос, затем `can` / `authorize` |
-| Получение списка | `ability.where(...)` в запросе; не фильтруйте в JS постфактум |
-| Обработчик мутации | `canMutate` + `validatePayload` |
-| Клиентский компонент | `<AbilityProvider rules={ability.rules}>`, `<Can>` / `useAbility` |
-| Граница сервер → клиент | отправляйте `ability.rules`, это обычный JSON |
-
-## Полная документация
-
-Страницы по каждому понятию, на английском и русском, собраны в [docs/README.ru.md](./README.ru.md).
+Страницы по каждому концепту, на английском и русском: [docs/README.ru.md](./README.ru.md).

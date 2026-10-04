@@ -1,103 +1,62 @@
-# Conditions across relations
+# Relations
 
 **[English](relations.md) · [Русский](relations.ru.md)**
 
-Plenty of real rules aren't about the row itself: *the post's blog belongs to my workspace*, *none of its comments are flagged as spam*. A relation is just another key in `where`.
+A relation declared in [`defineAbilities`](./define-abilities.md) is another key in `where`:
 
 ```ts
 allow("update", "post", {
 	where: {
-		status: "published",                     // a field
-		author: { role: "admin" },               // to-one relation
-		comments: { none: { spam: true } },      // to-many relation
+		author: { role: "admin" },                           // to-one
+		comments: { none: { spam: true } },                  // to-many
+		blog: { workspace: { id: { in: workspaceIds } } },   // nested
 	},
 });
 ```
 
-Because `createRules(ac)` knows your declarations, it can tell a field from a to-one from a to-many — and so can TypeScript. A wrong relation name, a to-one used where a to-many belongs, or a typo in a related resource's field is a compile error.
+A wrong relation name, a field the related resource lacks, or a to-many without a quantifier does not compile.
 
-Relations nest as deep as you declared them:
-
-```ts
-where: { blog: { workspace: { id: workspaceId } } }
-```
-
-## Quantifiers
-
-A to-many relation needs to say *how many* related rows must match:
-
-| | Holds when |
-|---|---|
-| `some` | at least one related row matches |
-| `every` | all of them match |
-| `none` | none of them match |
-
-Over an empty collection: `some` is false, `every` and `none` are true — the usual reading of "all of nothing" and "none of nothing".
-
-A to-one relation takes no quantifier; you nest the condition directly, and it holds when that single related row satisfies it.
-
-## Loading relations is your job — and forgetting is loud
-
-To answer *is this post's author an admin?* the author has to actually be on the object. If it isn't, the engine **throws** `RelationNotLoadedError` instead of deciding.
-
-That is deliberate. The alternative — treating missing data as "doesn't match" — turns a forgotten `include` into a silent policy change, and for a `deny` it means the prohibition quietly stops applying.
-
-The engine reads the same convention your ORM already follows:
-
-| What's on the object | Read as | Result |
+| To-many quantifier | Holds when | On an empty list |
 |---|---|---|
-| `undefined` (key absent) | not loaded | **throws** |
-| `null` | loaded, nothing there | empty collection |
-| an object, or array of objects | loaded | evaluated normally |
-| a string / number / bigint | you selected ids, not rows | **throws** — the relation isn't really loaded |
-| anything else | corrupt data | unknown → an allow grants nothing, a deny fires |
+| `some` | at least one related row matches | no |
+| `every` | all of them match | yes |
+| `none` | none of them match | yes |
 
-Prisma, Drizzle and TypeORM all follow it: `include`/`with` gives you objects or `null`, and a relation you didn't ask for is `undefined`.
+A to-one relation takes the condition directly.
 
-What the engine reads is plain data — an object whose prototype is `Object.prototype`, or none at all. Prisma and Drizzle hand you exactly that. TypeORM hands you entity **class instances**, and a check on one answers no: the engine does not read fields through a prototype it doesn't know. Spread the entity on the way in:
+## Load what the rules read
 
-```ts
-const entity = await repository.findOne({
-	where: { id: postId },
-	relations: { author: true },
-});
-
-ability.can("read", "post", { ...entity });
-```
+If a rule reads `post.author.role`, the author has to be on the row. When it is not, `can()` **throws** `RelationNotLoadedError` instead of deciding, even if another part of the condition already settled the answer:
 
 ```ts
 const post = await db.query.posts.findFirst({
 	where: eq(posts.id, id),
-	with: { author: true, comments: true },   // needed by the rules above
+	with: { author: true, comments: true },
 });
 
 ability.can("update", "post", post);
 ```
 
-## `markLoaded` — when the convention doesn't apply
+| On the row | Read as |
+|---|---|
+| no key, or `undefined` | not loaded — throws |
+| a string or a number | an id, not a row — throws |
+| `null` | loaded and empty: a to-one matches nothing, a to-many is an empty list |
+| an object, or an array of objects | loaded |
+| anything else | corrupt — unknown: an `allow` grants nothing, a `deny` fires |
 
-For hand-assembled objects, or an ORM that breaks the convention, state it explicitly:
+Prisma and Drizzle return rows in this form. The engine reads plain objects only, so convert class instances — TypeORM entities — with `structuredClone(entity)`, which also turns the related entities into plain objects. A spread copies only the top level.
 
-```ts
-import { markLoaded } from "@vetojs/core";
+A row assembled by hand needs the relation key set: `{ ...post, author }`. `markLoaded(post, "author", author)` does the same and refuses `undefined`; pass `null` for loaded-but-empty.
 
-const withAuthor = markLoaded(post, "author", author);
-const withoutBlog = markLoaded(post, "blog", null); // loaded, and empty
-```
-
-It returns a **copy** — your input is not mutated — carrying the value plus an invisible marker (a global symbol, so `Object.keys` and `JSON.stringify` don't see it).
-
-Passing `undefined` as the value throws: `undefined` is precisely what "not loaded" means, so marking a relation loaded with it is a contradiction. Use `null` for loaded-but-empty.
+In SQL a relation becomes an `EXISTS` subquery — see the [Drizzle adapter](./drizzle.md#relations).
 
 ## Why it works this way
 
-- **Missing data throws; it never returns "no match".** A forgotten `include` is a bug in your query, and bugs that quietly change authorization outcomes are the worst kind.
-- **An id where an object was expected also throws.** Selecting `authorId` instead of the author is the most common form of "not loaded" — it deserves the same loud failure, not a comparison against a string.
-- **Other garbage is "unknown", not an error.** A boolean or a stray `null` inside the array isn't a load state, it's corrupt data — so it fails closed both ways instead of crashing the request.
-- **Nesting is free.** A relation's `where` is an ordinary condition, so relations inside relations need no special handling.
+- **A missing relation throws.** Reading it as "doesn't match" would turn a forgotten `include` into a policy change, and a `deny` would quietly stop applying.
+- **An id where a row was expected throws too.** Selecting `authorId` instead of the author is the commonest way to forget a load.
+- **Other garbage is unknown, not an error**, so corrupt data fails closed instead of crashing the request.
 
 ## Source
 
-[`compile/matcher.ts`](../packages/core/src/compile/matcher.ts) · [`errors/relation-not-loaded.ts`](../packages/core/src/errors/relation-not-loaded.ts) · tests: [conditions](../packages/core/tests/compile/matcher.test.ts), [loaded](../packages/core/tests/row/loaded.test.ts)
-
-In SQL these compile to `EXISTS` / `NOT EXISTS` subqueries, handled by a database adapter.
+[`row/read.ts`](../packages/core/src/row/read.ts) · [`row/loaded.ts`](../packages/core/src/row/loaded.ts) · [`errors/relation-not-loaded.ts`](../packages/core/src/errors/relation-not-loaded.ts) · [tests](../packages/core/tests/row/loaded.test.ts)

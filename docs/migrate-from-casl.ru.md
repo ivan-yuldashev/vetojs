@@ -4,32 +4,28 @@
 
 Сверено с `@casl/ability@7.0.1` и `@casl/react@7.0.1`.
 
-Бо́льшая часть перехода механическая. Под ней лежит одна идея, которая механической не является, — если понять её первой, остальное станет очевидным.
-
-## Что меняется по существу
-
-В CASL ability — это **экземпляр класса**, а объект помечается изменением самого объекта. В Veto ability — это **замыкания над обычными данными**, а имя ресурса передаётся аргументом.
+В CASL ability — экземпляр класса, а объект помечают, изменяя его. В veto ability — замыкания над обычными данными, а имя ресурса передаётся аргументом:
 
 ```ts
-// CASL — помечается объект
+// CASL
 ability.can("update", subject("Post", post));
 
-// Veto — передаётся имя
+// veto
 ability.can("update", "post", post);
 ```
 
-Из этого одного различия следует всё остальное: ваши объекты никто не оборачивает, `ability.rules` — это JSON, который можно отправить куда угодно, а серверный компонент передаёт правила клиенту без плясок с сериализацией.
+Ваши объекты ничем не оборачиваются, а `ability.rules` — это JSON, который можно отправить куда угодно.
 
 ## Объявление предметной области
 
-CASL ничего не выводит — алгебру типов и формы вы пишете руками:
+CASL требует писать алгебру типов руками:
 
 ```ts
 type Abilities = ["read" | "update", "Post" | Post] | ["read", "User" | User];
 const ability = createMongoAbility<MongoAbility<Abilities>>(rules);
 ```
 
-Veto берёт одно объявление и выводит из него всё:
+veto принимает одно объявление и выводит остальное:
 
 ```ts
 const ac = defineAbilities({
@@ -43,9 +39,9 @@ const ac = defineAbilities({
 });
 ```
 
-Имена ресурсов здесь — строки в нижнем регистре, а не имена классов: это ключи вашего объявления, поэтому `"post"`, а не `"Post"`.
+Ресурсы — это ключи объявления: `"post"`, а не `"Post"`.
 
-## Написание правил
+## Правила
 
 ```ts
 // CASL
@@ -56,7 +52,7 @@ const ability = build();
 ```
 
 ```ts
-// Veto
+// veto
 const { allow, deny } = createRules(ac);
 
 const policyFor = (user: { id: string }) => [
@@ -67,172 +63,75 @@ const policyFor = (user: { id: string }) => [
 const ability = buildAbility(ac, policyFor(currentUser));
 ```
 
-Два отличия стоит заметить. Условия живут под ключом `where`, потому что Veto разделяет *какие строки* и *какие поля со значениями* — см. [запись](./mutations.ru.md). И политика — это обычная функция от пользователя, возвращающая массив: никакого билдера держать не нужно и `build()` вызывать не нужно.
+Условия лежат в `where`, отдельно от полей и значений ([запись](./mutations.ru.md)). Политика — функция, возвращающая массив: ни билдера, ни `build()`.
 
 ## Условия
 
-CASL принимает синтаксис запросов MongoDB. Veto — короткую запись с именованными операторами.
-
-| CASL | Veto |
+| CASL | veto |
 |---|---|
-| `{ status: "published" }` | `{ status: "published" }` |
 | `{ views: { $gt: 100 } }` | `{ views: { gt: 100 } }` |
-| `$eq` `$ne` `$in` `$nin` | `eq` `ne` `in` `nin` |
-| `$gt` `$gte` `$lt` `$lte` | `gt` `gte` `lt` `lte` |
-| `{ deletedAt: { $exists: false } }` | `{ deletedAt: { exists: false } }` |
-| `{ $and: [...] }` `{ $or: [...] }` | `{ and: [...] }` `{ or: [...] }` |
-| `{ $not: ... }` | `{ not: ... }` |
-| `{ title: { $regex: /release/ } }` | `{ title: { contains: "release" } }` — только вхождение подстроки |
+| `$eq $ne $in $nin $gt $gte $lt $lte` | `eq ne in nin gt gte lt lte` |
+| `{ $exists: false }` | `{ exists: false }` |
+| `$and` `$or` `$not` | `and` `or` `not` |
+| `{ $regex: /release/ }` | `{ contains: "release" }` — только подстрока |
 | `{ comments: { $elemMatch: { spam: true } } }` | `{ comments: { some: { spam: true } } }` — объявленная [связь](./relations.ru.md) |
 
-**Аналогов нет намеренно:** `$where` (произвольный JavaScript внутри правила нельзя ни сериализовать, ни сохранить, ни скомпилировать в SQL), `$regex` сложнее подстроки, `$size`, `$mod`, `$all`, `$nor`.
-
-Если вы на что-то из этого опираетесь, честный путь — поднять это в поле, по которому сможет фильтровать и база: колонка `commentCount` вместо `$size`, булев флаг вместо `$where`.
+Аналогов нет у `$where`, `$regex` сложнее подстроки, `$size`, `$mod`, `$all`, `$nor`: ни одно из них не хранится как данные и не компилируется в SQL. Вынесите такое условие в колонку: `commentCount` вместо `$size`, флаг вместо `$where`. Чтобы сравнить два поля строки, используйте [`ref`](./conditions.ru.md#сравнение-двух-полей).
 
 ## Проверки
 
 ```ts
-// CASL
-ability.can("update", subject("Post", post));
-ability.can("read", "Post");             // по типу субъекта
-ability.cannot("delete", subject("Post", post));
-```
-
-```ts
-// Veto
 ability.can("update", "post", post);
-ability.can("read", "post");             // без строки
-ability.cannot("delete", "post", post);
+ability.can("read", "post");               // без строки — для решений о рендере
 ability.authorize("delete", "post", post); // бросает ForbiddenError
 ```
 
-Форма без строки отвечает на вопрос *возможно ли это хоть для какой-то строки* — она для решения, рисовать ли элемент управления, а не для защиты операции над конкретной строкой. Если строка есть — передайте её.
-
-**Проверки по полям.** У `can("update", post, "title")` из CASL прямого близнеца нет. Veto разделяет вопросы: `ability.permittedFields("update", "post", post, fields)` для интерфейса и `ability.validatePayload(...)` на сервере — он возвращает проверенные данные либо точный список нарушений. См. [запись](./mutations.ru.md).
+`can("update", post, "title")` из CASL становится `permittedFields("update", "post", post, fields)` для формы и `validatePayload` на сервере.
 
 ## React
 
-`@casl/react` экспортирует `AbilityProvider`, `Can` и `useAbility`. У Veto то же самое — с одним структурным отличием, которое решает всё в Next.js.
-
 ```tsx
-// CASL — провайдер принимает экземпляр ability
+// CASL: провайдер принимает экземпляр
 <AbilityProvider value={ability}>
-	<App />
-</AbilityProvider>
-```
 
-```tsx
-// Veto — провайдер принимает правила, а это JSON
+// veto: провайдер принимает правила, а они — JSON
 <AbilityProvider rules={ability.rules}>
-	<App />
-</AbilityProvider>
 ```
 
-Это и есть лечение ошибки, на которую пользователи CASL наткнулись в Next 15 ([#999](https://github.com/stalniy/casl/issues/999)):
+Ability в CASL — экземпляр класса, поэтому Next отказывается передавать его из серверного компонента в клиентский ([casl#999](https://github.com/stalniy/casl/issues/999)). `ability.rules` проходит как есть. Привязки даёт `createVetoContext(ac)`.
 
-> Only plain objects, and a few built-ins, can be passed to Client Components from Server Components. Classes or null prototypes are not supported.
-
-`PureAbility` — экземпляр класса, границу он не пересекает. `ability.rules` — массив обычных объектов, поэтому пересекает, а клиент пересобирает ability из него.
-
-Привязки берутся из фабрики, потому что типам нужен ваш `ac`:
-
-```ts
-// src/veto.ts
-export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
-	createVetoContext(ac);
-```
-
-### Пропсы `<Can>`
-
-| CASL | Veto |
+| `<Can>` в CASL | `<Can>` в veto |
 |---|---|
-| `<Can I="update" a="Post">` | `<Can I="update" a="post">` |
-| `<Can I="update" an="Article">` | `<Can I="update" a="article">` — `an` нет |
-| `<Can I="update" this={post}>` | `<Can I="update" a="post" this={post}>` — ресурс называется всегда |
-| `<Can do="update" on="Post">` | не поддерживается — используйте `I` / `a` |
-| `<Can not>` | используйте `fallback` либо `useCan` и ветвление |
-| `<Can passThrough>` | не поддерживается |
-| `{({ isAllowed }) => ...}` | не поддерживается — используйте `useCan` |
+| `I="update" a="Post"`, `an="Article"` | `I="update" a="post"` |
+| `I="update" this={post}` | `I="update" a="post" this={post}` — ресурс называется всегда |
+| `not`, `passThrough`, render props | `fallback` или `useCan` с ветвлением |
 | `field="title"` | `permittedFields` |
-| — | `fallback={<ReadOnly />}` |
-| — | `ability={ability}` — вообще без контекста |
+| — | `ability={ability}` — без контекста |
 
-### Серверные компоненты
-
-Аналога в CASL нет, и ради этого переход в основном и затевается:
-
-```tsx
-import { Can } from "@vetojs/react/server";
-
-const ability = await getAbility();
-
-<Can ability={ability} I="update" a="post" this={post} fallback={<ReadOnly />}>
-	<EditForm post={post} />
-</Can>
-```
-
-Ни провайдера, ни контекста, ни `"use client"`, и в браузер не уезжает ничего — обе ветки решаются во время рендера. Ability собирайте один раз на запрос через `cache` из React.
-
-### Перерисовки
-
-`useAbility` в CASL будит всех потребителей при любой смене ability. У Veto — так же, и намеренно: хук отдаёт объект целиком. Когда нужен один ответ, `useCan` подписывается только на него:
-
-```tsx
-const canEdit = useCan("update", "post", post);
-```
-
-На списке из 50 закрытых строк, где меняется один вердикт, это 1 перерисовка вместо 50. А чтобы сменить пользователя вообще без перерисовки страницы, вместо передачи новых `rules` вниз используйте `useSetRules`.
+Серверный компонент берёт `Can` из `@vetojs/react/server`: ни провайдера, ни `"use client"`, обе ветки решаются на сервере. `useCan` перерисовывает, только когда меняется его единственный вердикт, а `useAbility` — как и в CASL — при любой смене.
 
 ## Запросы к базе
 
 ```ts
-// CASL — через адаптер под вашу ORM
-const posts = await prisma.post.findMany({ where: accessibleBy(ability).Post });
+// CASL: адаптер под каждую ORM
+const rows = await prisma.post.findMany({ where: accessibleBy(ability).Post });
+
+// veto: дерево условий, которое компилирует @vetojs/drizzle
+const filter = ability.where("read", "post");
 ```
 
-```ts
-// Veto — обычное дерево условий
-const condition = ability.where("read", "post");
-```
+## Где поведение отличается
 
-`where()` возвращает данные, а не запрос. `@vetojs/drizzle` компилирует их в SQL с проверенной гарантией: запрос вернёт ровно те строки, которые разрешает `can()`. А без адаптера дерево можно обойти самому — в этом и отличие от ожидания релиза адаптера под следующий мажор вашей ORM.
+**Значения не того типа.** CASL сравнит `{ views: "100" }` с `{ $gt: 50 }` и разрешит; `deny` по `secret: true` не сработает на `secret: "true"`. veto отвечает «неизвестно»: `allow` ничего не разрешает, `deny` срабатывает.
 
-## Поведение, которое отличается
+**Связи должны быть загружены.** Правило, читающее `post.author.role`, на посте без автора бросает `RelationNotLoadedError`, а не отвечает «не совпало».
 
-Две вещи изменят то, что ваша политика делает на самом деле. Обе сделаны намеренно и обе играют на отказ.
+## Чек-лист
 
-**Значения не того типа.** В CASL условие может тихо посчитаться не в ту сторону:
-
-```ts
-// CASL: проходит, потому что "100" сравнивается как строка
-ability.can("read", subject("Post", { views: "100" }));   // правило: { views: { $gt: 50 } }
-
-// CASL: запрет не срабатывает на значении не того типа
-ability.can("read", subject("Post", { secret: "true" })); // запрет: { secret: true }
-```
-
-Veto на присутствующее значение неверного типа отвечает **«неизвестно»**: `allow` не даёт ничего, а `deny` всё равно срабатывает. Испорченные данные способны только сузить доступ. См. [операторы](./operators.ru.md).
-
-**Связи должны быть загружены.** Если правило читает `post.author.role`, а автора не загрузили, Veto бросит `RelationNotLoadedError`, а не ответит тихо «не совпало». Забытый `include` — это ошибка в запросе, а не изменение политики. См. [связи](./relations.ru.md).
-
-## Правила из базы
-
-Если правила хранятся в JSON, проверьте их на границе до сборки:
-
-```ts
-const result = parseRules(JSON.parse(raw));
-if (!result.ok) throw new Error(result.errors.join("\n"));
-const ability = buildAbility(ac, result.rules);
-```
-
-`buildAbility` принимает только правила, доказуемо прошедшие проверку, — из `createRules` либо из `parseRules`. См. [правила извне](./parse.ru.md).
-
-## Порядок действий
-
-1. Заменить алгебру типов одним вызовом `defineAbilities`; переименовать субъекты в ключи ресурсов в нижнем регистре.
-2. Превратить билдер в функцию от пользователя, возвращающую массив; условия перенести под `where`.
-3. Перевести операторы (убрать `$`); `$elemMatch` переписать как объявленную связь; найти замену для `$where`, `$regex`, `$size`, `$mod`, `$all`.
-4. Убрать `subject()` везде и передавать имя ресурса вторым аргументом.
-5. У провайдера заменить `value={ability}` на `rules={ability.rules}`; серверную защиту перевести на `@vetojs/react/server`.
-6. Заменить `accessibleBy` на `ability.where()` плюс адаптер.
-7. Перепрогнать тесты авторизации — поведение меняется именно на значениях неверного типа.
+1. Замените алгебру типов одним `defineAbilities`; переименуйте субъекты в ключи в нижнем регистре.
+2. Превратите билдер в функцию от пользователя; перенесите условия в `where`.
+3. Уберите `$` у операторов; перепишите `$elemMatch` связью; замените `$where`, `$regex`, `$size`, `$mod`, `$all`.
+4. Уберите `subject()` и передавайте имя ресурса.
+5. Дайте провайдеру `rules={ability.rules}`; закрывайте серверные компоненты через `@vetojs/react/server`.
+6. Замените `accessibleBy` на `ability.where()` и адаптер.
+7. Перезапустите тесты авторизации — ответы меняются на значениях не того типа.

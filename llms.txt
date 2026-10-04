@@ -2,51 +2,48 @@
 
 > Authorization for TypeScript apps and the AI agents working in them. A policy is a pure function of the user returning an array of rules — plain JSON. The same array answers `can()`, compiles to a SQL `WHERE`, checks writes field by field and guards an agent's tool calls for the person the agent acts for; it crosses the server/client boundary untouched and fails closed on malformed data. The engine has no runtime dependencies.
 
-Install `@vetojs/core` for the engine; add `@vetojs/react` for `<Can>` / `useAbility` bindings, `@vetojs/core/guard` to guard a server action, an HTTP handler or a tool call, or `@vetojs/drizzle` to filter a query in SQL. ESM only, Node 20+.
+Install `@vetojs/core` for the engine and `@vetojs/core/guard`; add `@vetojs/react` for `<Can>` / `useCan` / `useAbility`, or `@vetojs/drizzle` to filter a query in SQL. ESM only, Node 20+.
 
-The one page to read if you are generating code that uses this library is [For agents](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/for-agents.md) — it carries the whole API surface plus the mistakes that look plausible but are wrong.
+If you are generating code that uses this library, read [For agents](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/for-agents.md) first — the whole API on one page, plus the mistakes that look plausible but are wrong.
 
 ## Start here
 
-- [For agents](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/for-agents.md): the complete API in one page, correct idioms, and the errors to avoid.
-- [Project README](https://github.com/ivan-yuldashev/vetojs/blob/main/README.md): what the library is, why it exists, and how it compares to CASL.
+- [For agents](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/for-agents.md): the complete API, correct idioms, mistakes to avoid.
+- [Project README](https://github.com/ivan-yuldashev/vetojs/blob/main/README.md): what the library does and how it compares to CASL.
 - [Documentation index](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/README.md): a page per concept, English and Russian.
 
-## Coming from CASL
+## Agents
 
-- [Migrating from CASL](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/migrate-from-casl.md): API mapping, operators without an equivalent, the React and RSC part, and the behaviour that differs.
+- [Guarding what an agent does](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.md): tool calls checked against the person's policy, per-field refusals a model can act on, a `deny` on an environment key to give the agent less than its person, tools with no table (mail, files, payments) judged on a row built from the arguments.
 
-## Setting up a policy
+## A policy
 
-- [Declaring resources](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/define-abilities.md): `defineAbilities` — the single declaration every type is inferred from.
-- [What a rule is](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/rules.md): the data model, and why `where` (which rows) and `payload` (which fields and values) are separate.
-- [The `manage` action](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/rules.md): the wildcard every resource accepts — it grants actions added later, so write the list out when a grant should be a snapshot.
-- [Writing policies](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/create-rules.md): `createRules` — typed `allow` / `deny` factories.
-- [Checking access](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.md): `buildAbility` — `can`, `cannot`, `authorize`, `permittedFields`, `validate`.
+- [Declaring resources](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/define-abilities.md): `defineAbilities` — every type is inferred from it; `env` declares what a rule's `when` reads.
+- [Rules](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/create-rules.md): `createRules` — `where` (which rows), `fields` and `values` (what may be written), `when` (which requests), `manage`, the stored JSON form.
+- [Checking access](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.md): `buildAbility` — `can`, `authorize`, `permittedFields`, `validate`, `onDecision`; `withEnv` binds the request's environment.
 
 ## Conditions
 
-- [Conditions](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/conditions.md): the tree behind `where`, and the third answer — "unknown".
-- [Field shorthand](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/condition-shorthand.md): how `{ views: { gte: 100 } }` is written and stored.
-- [Operators](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.md): all thirteen, with the null and type-mismatch behaviour that keeps checks safe.
+- [Conditions](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/conditions.md): the shorthand, operators by field type, `{ ref }` to compare two fields of a row, the stored tree, unknown.
+- [Operators](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.md): all thirteen, with the `null`, type-mismatch and `NaN` behaviour that keeps checks safe.
 - [Relations](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.md): conditions across related resources, and why a relation you forgot to load throws.
 
 ## Enforcing
 
-- [How a decision is made](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/rule-evaluation.md): deny-override, default-deny, fail-closed.
+- [How a decision is made](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/rule-evaluation.md): deny wins, default deny, unknown never grants.
 - [Writes](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/mutations.md): `canMutate` for the row, `validatePayload` for fields and values.
-- [Filtering in the database](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/where.md): `ability.where()` returns a condition that selects exactly the rows `can()` allows.
-- [Rules from outside](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/parse.md): `parseRules` — the gate for rule JSON from a database or the network.
+- [Filtering in the database](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/where.md): `ability.where()` selects exactly the rows `can()` allows.
+- [Rules from outside](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/parse.md): `parseRules` — the gate for rule JSON from a database or the network; it checks shape, not names.
 
 ## In an app
 
-- [React](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/react.md): `createVetoContext(ac)` → `AbilityProvider`, `<Can>`, `useCan`, `useSetRules`; `@vetojs/react/server` gates a server component with no client boundary. A screen or tab with no rows behind it is a resource too — gate it on the route parameters, and pass them as the row.
-- [Guard](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/guard.md): `createGuard` → `withPermission` — the actor, the row and the payload checked before a server action, an HTTP handler or an agent's tool call runs.
-- [Drizzle](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/drizzle.md): `defineTables` → `filter` — the policy as a SQL `WHERE` that returns exactly the rows `can()` allows. Postgres.
-- [Express, Fastify, Hono](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/http.md): the guard in a plain HTTP handler; no framework package needed.
+- [The guard](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/guard.md): `createGuard` → `withPermission` — the actor, the row and the payload checked before a server action, an HTTP handler or a tool call runs.
+- [HTTP handlers](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/http.md): Express, Fastify, Hono, with no framework package.
+- [React](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/react.md): `createVetoContext(ac)` → `AbilityProvider`, `<Can>`, `useCan`, `useSetRules`; `@vetojs/react/server` gates a server component.
 - [Server rendering](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ssr.md): rules across the boundary beyond RSC, and why a static page cannot carry a verdict.
-- [Agents](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.md): guarding tool calls with the same policy, the per-field refusal a model can act on, and effects with no row — mail, files, webhooks, payments — judged on a row built from the arguments.
-- [Postgres RLS](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/rls.md): running veto alongside row-level security, and the traps that make RLS protect nothing.
+- [Drizzle](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/drizzle.md): `defineTables` → `filter` — the policy as a SQL `WHERE`. Postgres.
+- [Postgres RLS](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/rls.md): running veto alongside row-level security.
+- [Migrating from CASL](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/migrate-from-casl.md): API mapping and the behaviour that differs.
 
 ## Optional
 

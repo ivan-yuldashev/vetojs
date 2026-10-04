@@ -106,15 +106,14 @@ allow("read", "post", { where: { status: "archived" } });
 
 ## Core API
 
-The main entry point is four functions and one object.
-
 - [`defineAbilities`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/define-abilities.md) — the single source of truth. Row shapes, actions and relations are all inferred from it.
 - `shape<T>()` — declares a resource shape. For runtime validation, pass any schema compatible with [Standard Schema](https://standardschema.dev) instead: Zod, Valibot, ArkType.
 - [`createRules(ac)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/create-rules.md) — hands back `allow` and `deny`, checked against your schema.
 - [`buildAbility(ac, rules)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.md) — turns a flat array into an `ability`.
-- [`parseRules(json, ac)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/parse.md) — checks untrusted rule JSON at the boundary.
-- [`markLoaded`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.md) — marks a relation as loaded when the data was assembled by hand rather than by an ORM.
-- `ConditionOperator` — `eq`, `ne`, `in`, `nin`, `gt`, `gte`, `lt`, `lte`, `contains`, `exists`, `has`, `hasAny`, `hasAll`.
+- [`withEnv(ability, env)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.md#withenv--the-requests-environment) — binds the environment of one request — the hour, the IP, whether the session passed MFA — when the declarations name an `env` and rules read it in `when`.
+- [`parseRules(json)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/parse.md) — checks untrusted rule JSON at the boundary.
+- [`markLoaded`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.md) — a copy of a hand-assembled row with a relation set.
+- `ConditionOperator` — `eq`, `ne`, `in`, `nin`, `gt`, `gte`, `lt`, `lte`, `contains`, `exists`, `has`, `hasAny`, `hasAll`; `{ ref: "field" }` in place of a value [compares two fields](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/conditions.md#comparing-two-fields) of the row.
 - `ForbiddenError`, `RelationNotLoadedError` — the only two classes in the package.
 
 What `ability` can do:
@@ -156,6 +155,8 @@ import { getActor } from "./auth";
 export const withPermission = createGuard({ ac, getActor, policy: policyFor });
 ```
 
+With an `env` declared, the config also takes `getEnv`, which reads the environment of each call from the wrapped function's arguments.
+
 From there each action names only two things: what it does and to which resource. The wrapper resolves the user, loads the row, validates the payload and only then enters the handler — the same way for a server action, an [HTTP handler](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/http.md) and an [agent tool call](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.md).
 
 ```ts
@@ -173,24 +174,18 @@ const publishPost = withPermission(
 
 The wrapped function keeps its original signature: `(id: string) => Promise<…>`. Your calling code does not change.
 
-## Predictable behaviour on bad data
+## Bad data and missing relations
 
-Databases hold `NULL`s, and clients send text where a number was expected. When no condition can be answered honestly, the engine does not guess — it returns the verdict **"unknown"**.
+A wrong-typed field, `NaN` or an object compared by value answers **unknown**: an `allow` grants nothing, a `deny` fires ([operators](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.md)).
 
-That is safe in both directions: an `allow` grants nothing on it, a `deny` fires anyway. Bad data can only narrow access ([more about operators](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.md)).
-
-### With relations the engine is stricter
-
-If a rule inspects `post.author.role`, the author must be loaded together with the post. A forgotten `include` is a bug in the query, not a reason to silently change permissions, so `can()` does not answer "doesn't match" — it **throws** `RelationNotLoadedError`:
+A rule that reads `post.author.role` needs the author loaded. Without it `can()` throws `RelationNotLoadedError` instead of answering "doesn't match":
 
 ```ts
 const post = await db.query.posts.findFirst({ with: { author: true } });
 ability.can("update", "post", post);
 ```
 
-The convention is the one your ORM uses: `undefined` means the relation was not loaded, `null` means it was loaded and is empty.
-
-If you assembled the row not by query but by hand — stitched from two responses, pulled from a cache — the engine has to be told: `markLoaded(post, "author", author)` returns a copy tagged "the author is loaded". Without it the relation counts as unloaded and `can()` throws ([more about relations](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.md)).
+`undefined` means not loaded, `null` loaded and empty. A row assembled by hand needs the key set — `{ ...post, author }` — and ORM class instances are converted with `structuredClone` ([relations](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.md)).
 
 ## How it's built
 

@@ -41,6 +41,7 @@ The guard loads the row the model named and checks it against the person's polic
 
 - **Reads go through the same policy.** A search tool filters in SQL with `schema.filter` and returns what the person may see, not what the server may. Retrieval is where an over-permissioned agent leaks quietly: nothing throws, the model simply sees more.
 - **A tool with no table behind it is judged too.** Mail, files, webhooks, payments: the row is built from the arguments the model chose — the recipient's domain, the amount, the directory it writes to — and the policy judges it like any other.
+- **The agent can get less than its person.** Declare an environment key and deny on it — `deny("delete", "invoice", { when: { viaAgent: true } })` — and the same policy keeps the agent from deleting what the person may.
 - **MCP and the Anthropic SDK need no wrapper package.** The actor comes from `extra.authInfo` in an MCP handler, or from the surrounding scope when a tool is defined per conversation.
 
 veto limits authority; it does not detect manipulation. A model talked into something still gets no more than the person it acts for could do anyway — and that limit is data you can test, not a sentence in a prompt. [Guarding what an agent does](docs/agents.md) walks through the integrations end to end.
@@ -122,14 +123,9 @@ An action, resource, field or value that drifts from the declaration is a compil
 
 ## The same rules in every layer
 
-An access decision is not made in one place: it happens in the handler, in the database query, while a page renders, in an agent's tool call. All of them ask the same policy function — and none of them needs a package of its own.
-
-- **[Server actions and RSC](docs/guard.md)** — `createGuard` resolves the user, loads the row, validates the payload, and only then runs the handler.
-- **[HTTP handlers](docs/http.md)** — Express, Fastify, Hono. A handler is a function, and the guard wraps functions; what differs is only where the user sits on the request and how a refusal becomes a status.
-- **[Agent tool calls](docs/agents.md)** — the row the model named, checked against the policy of the person the agent acts for; [above](#when-the-caller-is-an-ai-agent) in brief.
-- **[Server rendering beyond RSC](docs/ssr.md)** — SvelteKit's `load`, Nuxt's payload, Astro's island props, React Router's loaders. Rules are JSON, so they travel in whatever channel the framework already has.
-- **[The database](docs/where.md)** — the same rules as a `WHERE`, on reads and on writes alike, with the guarantee that the query returns exactly what `can()` allows.
-- **[Alongside Postgres RLS](docs/rls.md)** — how the two compose, and three situations where row-level security silently stops protecting anything: the table owner bypasses policies without `FORCE`, the actor setting is lost behind a pooler, and a prohibition without `AS RESTRICTIVE` prohibits nothing.
+- **[Server actions and HTTP handlers](docs/guard.md)** — `createGuard` resolves the user, loads the row, validates the payload, then runs the handler. Express, Fastify and Hono need [no package of their own](docs/http.md).
+- **[Server rendering](docs/ssr.md)** — rules are JSON, so they travel in RSC props, SvelteKit's `load`, Nuxt's payload or Astro's island props.
+- **[Postgres RLS](docs/rls.md)** — how the two compose, and three ways row-level security silently protects nothing.
 
 ### From the database to the button — one array of rules
 
@@ -190,7 +186,9 @@ The button, the request and the row in the database all rest on one array of JSO
 The questions that come once the idea fits: what happens on bad data, where the rules can live, what the library weighs and what it pulls in.
 
 - **Bad data never opens a door.** A wrong-typed field or a missing key answers *unknown*. A grant does not fire on that verdict; a denial does — access can only narrow, never widen.
-- **Rules can live in a database.** [`parseRules`](docs/parse.md) checks the JSON that arrives at the boundary: a grant it does not recognise is dropped, a **denial** it does not recognise is kept. So a database that ran ahead of the deploy can only narrow access.
+- **Rules can live in a database.** [`parseRules`](docs/parse.md) checks the shape of the JSON that arrives and reports every error with its path; `buildAbility` takes no rule that skipped it.
+- **A condition can compare two fields of a row** — `{ spent: { lte: { ref: "limit" } } }` — in memory and in SQL alike.
+- **A rule can depend on the request.** Declare an `env` — the hour, the IP, whether the session passed MFA — and a rule reads it in `when`; [`withEnv`](docs/ability.md#withenv--the-requests-environment) binds the values of one request. A key the request lacks never lifts a prohibition.
 - **Rules are plain JSON, not class instances.** Put them in a server component's props, in a SvelteKit `load`, or in a Nuxt payload, and they work on the other side as they are.
 - **No hidden state.** Bar two error classes, there are no classes in the package. `buildAbility` mutates nothing and caches nothing between requests.
 - **Types infer themselves.** One `defineAbilities` declaration — from there your editor fills in actions, resources, fields and operators. No hand-written generics, no `any`.
@@ -249,7 +247,7 @@ Speed was compared on the same rules and the same rows as in [what a check costs
 - **A 222-rule policy where an early rule grants: 7.7–10× faster here.** That is what a policy looks like when it is generated per tenant instead of per role. When nothing matches at all, the margin falls to 1.7×.
 - **The same 222 rules when the granting rule sits last: 2.3× faster there.** CASL's precedence is positional: it stops at the first rule that matches. Here a `deny` wins wherever it sits, so a yes has to see every prohibition. The loss shows up only on a policy [you should not write anyway](docs/create-rules.md#one-rule-per-role-not-per-tenant): grouped by role, those 222 rules collapse to a dozen, and you are back at the previous point.
 
-[Migrating from CASL](docs/migrate-from-casl.md) maps the API across, names the operators that have no equivalent, and covers the three behaviour differences that can change what your policy decides.
+[Migrating from CASL](docs/migrate-from-casl.md) maps the API across, names the operators that have no equivalent, and covers the two behaviour differences that can change what your policy decides.
 
 ## Roadmap
 

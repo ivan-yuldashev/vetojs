@@ -67,6 +67,8 @@ Why a factory rather than a ready-made import: typed bindings need your `ac`. Th
 
 `rules` takes `ability.rules` — the same flat array the server sent. If you already built an ability on the client, pass `ability` instead of `rules`; both at once is not allowed, and the type enforces that.
 
+With an [`env` declared](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/define-abilities.md#the-requests-environment), pass `withEnv` to the factory — `createVetoContext(ac, withEnv)` — and the provider takes `env` beside `rules`. A change of either rebinds, and only the verdicts that flip re-render.
+
 ### 4. Hide what there are no rights for
 
 ```tsx
