@@ -13,6 +13,15 @@ type Rels<AC extends ResourceMap, R extends ResourceName<AC>> = AC[R] extends {
 
 type Group = "and" | "or" | "not";
 
+type Present<V> = Exclude<V, null | undefined>;
+
+type RefTo<T, V> = {
+	ref: {
+		[K in keyof T]-?: [Present<T[K]>] extends [Present<V>] ? K : never;
+	}[keyof T] &
+		string;
+};
+
 export type StatedKey =
 	"veto: a condition has to name at least one field, relation or group";
 
@@ -21,6 +30,11 @@ type Quantifier<AC extends ResourceMap, R extends ResourceName<AC>> = {
 	every?: WhereInput<AC, R>;
 	none?: WhereInput<AC, R>;
 } & Names<"some" | "every" | "none">;
+
+type ColumnValue<Shape, K extends keyof Shape> = FieldValue<
+	Shape[K],
+	RefTo<Shape, Shape[K]>
+>;
 
 type RelationValue<AC extends ResourceMap, Relation> = Relation extends {
 	kind: infer Kind;
@@ -49,7 +63,7 @@ type WhereValue<
 	: K extends keyof Rels<AC, R>
 		? RelationValue<AC, Rels<AC, R>[K]>
 		: K extends keyof ShapeOf<AC, R>
-			? FieldValue<ShapeOf<AC, R>[K]>
+			? ColumnValue<ShapeOf<AC, R>, K>
 			: never;
 
 export type WhereNode<AC extends ResourceMap, R extends ResourceName<AC>> = {

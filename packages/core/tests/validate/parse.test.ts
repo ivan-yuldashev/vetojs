@@ -899,3 +899,31 @@ describe("a condition on the environment", () => {
 		}
 	});
 });
+
+describe("a comparison of two fields", () => {
+	const REFUSAL =
+		'.ref: names another field to compare with, only in where, under "eq" | "ne" | "gt" | "gte" | "lt" | "lte", and in place of a value';
+	const ruleWith = (key: string, node: unknown) => [
+		{ effect: "deny", action: "update", resource: "post", [key]: node },
+	];
+
+	it("is accepted only in where, under a comparison, in place of a value", () => {
+		expect(
+			parseRules(ruleWith("where", { field: "a", op: "gte", ref: "b" })).ok,
+		).toBe(true);
+
+		for (const [key, node] of [
+			["where", { field: "a", op: "gte", ref: "b", value: 1 }],
+			["where", { field: "a", op: "contains", ref: "b" }],
+			["where", { field: "a", op: "gte", ref: "" }],
+			["where", { field: "a", op: "gte", ref: 7 }],
+			["values", { field: "a", op: "gte", ref: "b" }],
+			["when", { field: "a", op: "gte", ref: "b" }],
+		] as const) {
+			expect(parseRules(ruleWith(key, node))).toEqual({
+				ok: false,
+				errors: [`rules[0].${key}${REFUSAL}`],
+			});
+		}
+	});
+});

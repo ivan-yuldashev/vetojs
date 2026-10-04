@@ -332,6 +332,40 @@ const compileField = (
 	return ORDERING.includes(op) ? unknownOnNaN(column, predicate) : predicate;
 };
 
+type ColumnComparison = (left: Column, right: Column) => SQL;
+
+const REF_COMPARISONS: Partial<Record<ConditionOperator, ColumnComparison>> = {
+	[ConditionOperator.Equal]: eq,
+	[ConditionOperator.NotEqual]: ne,
+	[ConditionOperator.GreaterThan]: gt,
+	[ConditionOperator.GreaterThanOrEqual]: gte,
+	[ConditionOperator.LessThan]: lt,
+	[ConditionOperator.LessThanOrEqual]: lte,
+};
+
+const compileRef = (
+	left: Column,
+	op: ConditionOperator,
+	right: Column,
+): SQL => {
+	const compare = own(REF_COMPARISONS, op);
+
+	if (compare === undefined) {
+		throw new Error(
+			`veto: operator "${op}" cannot compare column "${left.name}" with column "${right.name}" — parseRules refuses such rules; fix the hand-built one.`,
+		);
+	}
+
+	const nan = [left, right]
+		.filter(holdsNaN)
+		.map((column) => sql`${column} = 'NaN'`);
+	const predicate = compare(left, right);
+
+	return nan.length === 0
+		? predicate
+		: sql`case when ${or(...nan)} then null::boolean else ${predicate} end`;
+};
+
 export type JoinPredicate = (parent: Table, child: Table) => SQL;
 
 export type JoinResolution = { join: JoinPredicate } | { unavailable: string };
@@ -446,6 +480,18 @@ const compileNode = (
 		throw new Error(
 			`veto: column "${String(node.field)}" does not exist in ${where}.`,
 		);
+	}
+
+	if (owns(node, "ref")) {
+		const other = own(frame.columns, node.ref);
+
+		if (other === undefined) {
+			throw new Error(
+				`veto: column "${String(node.ref)}" does not exist in table "${getTableName(frame.table)}".`,
+			);
+		}
+
+		return compileRef(column, node.op, other);
 	}
 
 	return compileField(column, node.op, node.value);

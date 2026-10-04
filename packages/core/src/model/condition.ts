@@ -8,6 +8,12 @@ export type FieldNode<T> = {
 	value: unknown;
 };
 
+export type RefNode<T> = {
+	field: keyof T & string;
+	op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte";
+	ref: keyof T & string;
+};
+
 type RelationNode =
 	| {
 			relation: string;
@@ -33,12 +39,13 @@ export type WhenNode =
 	| { not: WhenNode };
 
 /**
- * A rule's condition tree: a test on a field, a hop through a relation, or `and` / `or` /
- * `not` over them. Also what {@link Ability.where} returns, for an adapter to turn into
+ * A rule's condition tree: a test on a field against a value or against another field, a
+ * hop through a relation, or `and` / `or` / `not` over them. Also what {@link Ability.where} returns, for an adapter to turn into
  * a SQL `WHERE`.
  */
 export type ConditionNode<T extends Row> =
 	| FieldNode<T>
+	| RefNode<T>
 	| RelationNode
 	| { and: ConditionNode<T>[] }
 	| { or: ConditionNode<T>[] }

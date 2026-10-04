@@ -683,3 +683,41 @@ describe("a leaf of one's own", () => {
 		expect(compileMatcher(nested)({})).toBe(false);
 	});
 });
+
+describe("a comparison of two fields", () => {
+	const lte = {
+		field: "spent",
+		op: "lte",
+		ref: "limit",
+	} as unknown as ConditionNode<Post>;
+	const match = compileMatcher(lte);
+
+	it("compares the field with the other field of the same row", () => {
+		expect(match({ spent: 1, limit: 2 })).toBe(true);
+		expect(match({ spent: 3, limit: 2 })).toBe(false);
+	});
+
+	it("answers unknown when either side cannot be compared", () => {
+		for (const row of [
+			{ limit: 2 },
+			{ spent: 1 },
+			{ spent: null, limit: null },
+			{ spent: Number.NaN, limit: 2 },
+			{ spent: 1, limit: Number.NaN },
+			Object.assign(Object.create({ limit: 2 }), { spent: 1 }),
+		]) {
+			expect(match(row)).toBeUndefined();
+		}
+
+		expect(
+			compileMatcher({
+				field: "spent",
+				op: "eq",
+				ref: "limit",
+			} as unknown as ConditionNode<Post>)({
+				spent: Number.NaN,
+				limit: Number.NaN,
+			}),
+		).toBeUndefined();
+	});
+});

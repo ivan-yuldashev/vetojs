@@ -10,6 +10,7 @@ import {
 import { isPlainObject, own, owns } from "../shared/index.js";
 import {
 	combineNodes,
+	comparisonNode,
 	definedValueOf,
 	fieldNode,
 	keyNameOf,
@@ -153,7 +154,7 @@ export const compileWhereInput = (
 		const relation = relations === undefined ? undefined : own(relations, key);
 
 		return relation === undefined
-			? [fieldNode(key, value, "where")]
+			? [comparisonNode(key, value)]
 			: relationNodes(key, relation, value, ac);
 	});
 };

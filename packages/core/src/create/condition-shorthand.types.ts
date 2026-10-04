@@ -212,25 +212,27 @@ type HasAll<E> = {
 	hasAny?: never;
 };
 
-type ScalarOperators<V> =
-	| Eq<V>
-	| Ne<V>
+type ScalarOperators<V, R> =
+	| Eq<V | R>
+	| Ne<V | R>
 	| In<V>
 	| Nin<V>
 	| Exists
-	| (V extends number | Date ? Gt<V> | Gte<V> | Lt<V> | Lte<V> : never)
+	| (V extends number | Date
+			? Gt<V | R> | Gte<V | R> | Lt<V | R> | Lte<V | R>
+			: never)
 	| (V extends string ? Contains : never);
 
 type ArrayOperators<E> = Has<E> | HasAny<E> | HasAll<E> | Exists;
 
-export type FieldValue<V> = [Exclude<V, undefined | null>] extends [
+export type FieldValue<V, R = never> = [Exclude<V, undefined | null>] extends [
 	readonly (infer E)[],
 ]
 	? [Exclude<E, undefined | null>] extends [Scalar]
 		? ArrayOperators<E>
 		: Exists
 	: [Exclude<V, undefined | null>] extends [Scalar]
-		? V | ScalarOperators<V>
+		? V | ScalarOperators<V, R>
 		: Exists;
 
 type ValuesNode<T> = {

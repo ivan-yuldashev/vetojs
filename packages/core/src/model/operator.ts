@@ -21,6 +21,27 @@ export type ConditionOperator =
 export const CONDITION_OPERATORS: readonly ConditionOperator[] =
 	Object.values(ConditionOperator);
 
+export type RefOperator = (typeof ConditionOperator)[
+	| "Equal"
+	| "NotEqual"
+	| "GreaterThan"
+	| "GreaterThanOrEqual"
+	| "LessThan"
+	| "LessThanOrEqual"];
+
+export const refOperators = (): readonly RefOperator[] => [
+	ConditionOperator.Equal,
+	ConditionOperator.NotEqual,
+	ConditionOperator.GreaterThan,
+	ConditionOperator.GreaterThanOrEqual,
+	ConditionOperator.LessThan,
+	ConditionOperator.LessThanOrEqual,
+];
+
+export const isRefOperator = (operator: unknown): operator is RefOperator => {
+	return refOperators().some((known) => known === operator);
+};
+
 export const isOperator = (
 	operator: unknown,
 ): operator is ConditionOperator => {

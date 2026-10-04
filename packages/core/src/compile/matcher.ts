@@ -1,4 +1,4 @@
-import type { ConditionNode, FieldNode } from "../model/index.js";
+import type { ConditionNode, FieldNode, RefNode } from "../model/index.js";
 import { MatchQuantifier, RelationKind, type Row } from "../model/index.js";
 import { relatedOf } from "../row/index.js";
 import { own, owns } from "../shared/index.js";
@@ -15,6 +15,21 @@ import {
 const runOnItem = (item: Row, matcher: Matcher): Verdict => matcher(item);
 
 export type LeafOf = <T extends Row>(node: FieldNode<T>) => Matcher;
+
+const isComparable = (value: unknown): boolean => {
+	return value !== undefined && value !== null && !Number.isNaN(value);
+};
+
+const compileRef = <T extends Row>(node: RefNode<T>): Matcher => {
+	return (row) => {
+		const actual = own(row, node.field);
+		const other = own(row, node.ref);
+
+		return isComparable(actual) && isComparable(other)
+			? evaluateOperator(node.op, actual, other)
+			: undefined;
+	};
+};
 
 const rowLeaf: LeafOf = (node) => (row) => {
 	return evaluateOperator(node.op, own(row, node.field), node.value);
@@ -54,7 +69,7 @@ export const compileMatcher = <T extends Row>(
 	leafOf: LeafOf = rowLeaf,
 ): Matcher => {
 	if (owns(node, "field")) {
-		return leafOf(node);
+		return owns(node, "ref") ? compileRef(node) : leafOf(node);
 	}
 
 	if (owns(node, "and")) {

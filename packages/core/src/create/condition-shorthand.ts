@@ -1,6 +1,11 @@
-import type { FieldConditionNode } from "../model/index.js";
-import { ConditionOperator, isOperator, type Row } from "../model/index.js";
-import { isPlainObject, only } from "../shared/index.js";
+import type { FieldConditionNode, RefNode } from "../model/index.js";
+import {
+	ConditionOperator,
+	isOperator,
+	isRefOperator,
+	type Row,
+} from "../model/index.js";
+import { isPlainObject, only, own } from "../shared/index.js";
 
 const normalizeConditionValue = (value: unknown): unknown => {
 	if (value instanceof Date) {
@@ -38,7 +43,25 @@ const asOperator = (
 	return { op: operator, value: normalizeConditionValue(value) };
 };
 
+const refOf = (value: unknown): string | undefined => {
+	if (!isPlainObject(value) || Object.keys(value).length !== 1) {
+		return undefined;
+	}
+
+	const ref = own(value, "ref");
+
+	return typeof ref === "string" ? ref : undefined;
+};
+
 type ValueNode = { field: string; op: ConditionOperator; value: unknown };
+
+const equalNode = (field: string, raw: unknown): ValueNode => {
+	return {
+		field,
+		op: ConditionOperator.Equal,
+		value: normalizeConditionValue(raw),
+	};
+};
 
 export const fieldNode = (
 	field: string,
@@ -47,13 +70,28 @@ export const fieldNode = (
 ): ValueNode => {
 	const operator = asOperator(raw, scope, field);
 
-	return operator === null
-		? {
-				field,
-				op: ConditionOperator.Equal,
-				value: normalizeConditionValue(raw),
-			}
-		: { field, ...operator };
+	return operator === null ? equalNode(field, raw) : { field, ...operator };
+};
+
+export const comparisonNode = (
+	field: string,
+	raw: unknown,
+): ValueNode | RefNode<Row> => {
+	const operator = asOperator(raw, "where", field);
+
+	if (operator === null) {
+		return equalNode(field, raw);
+	}
+
+	if (isRefOperator(operator.op)) {
+		const ref = refOf(operator.value);
+
+		if (ref !== undefined) {
+			return { field, op: operator.op, ref };
+		}
+	}
+
+	return { field, ...operator };
 };
 
 const symbolRefusal = (scope: string, key: symbol): TypeError => {

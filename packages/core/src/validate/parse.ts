@@ -3,12 +3,14 @@ import {
 	ConditionOperator,
 	isOperator,
 	isQuantifier,
+	isRefOperator,
 	MATCH_QUANTIFIERS,
 	RELATION_KINDS,
 	RelationKind,
 	type Row,
 	RULE_EFFECTS,
 	RuleEffect,
+	refOperators,
 } from "../model/index.js";
 import { isPlainObject, own, owns } from "../shared/index.js";
 import type { RuleParseResult } from "./parse.types.js";
@@ -46,12 +48,45 @@ const isStringArray = (value: unknown): value is string[] => {
 	);
 };
 
-const validateFieldNode = (node: Row, path: string, errors: string[]): void => {
+const validateComparison: ShapeValidator = (
+	node,
+	path,
+	errors,
+	_depth,
+	grammar,
+) => {
+	validateFieldNode(node, path, errors, grammar.nesting === "condition");
+};
+
+const validateFieldNode = (
+	node: Row,
+	path: string,
+	errors: string[],
+	refers = false,
+): void => {
 	const field = own(node, "field");
 	const op = own(node, "op");
 
 	if (typeof field !== "string") {
 		errors.push(`${path}.field: expected a string`);
+	}
+
+	if (owns(node, "ref")) {
+		const { ref } = node;
+
+		if (
+			!refers ||
+			!isRefOperator(op) ||
+			typeof ref !== "string" ||
+			ref === "" ||
+			owns(node, "value")
+		) {
+			errors.push(
+				`${path}.ref: names another field to compare with, only in where, under ${quoted(refOperators())}, and in place of a value`,
+			);
+		}
+
+		return;
 	}
 
 	if (!isOperator(op)) {
@@ -256,7 +291,7 @@ const CONDITION_GRAMMAR: ConditionGrammar = {
 		or: walkOr,
 		not: walkNot,
 		relation: validateRelation,
-		field: validateFieldNode,
+		field: validateComparison,
 	},
 };
 
@@ -279,7 +314,7 @@ const VALUES_GRAMMAR: ConditionGrammar = {
 		or: (_node, path, errors) => outsideValues("or", path, errors),
 		not: (_node, path, errors) => outsideValues("not", path, errors),
 		relation: (_node, path, errors) => outsideValues("relation", path, errors),
-		field: validateFieldNode,
+		field: validateComparison,
 	},
 };
 
@@ -294,7 +329,7 @@ const WHEN_GRAMMAR: ConditionGrammar = {
 		relation: (_node, path, errors) => {
 			errors.push(`${path}: the environment has no relations`);
 		},
-		field: validateFieldNode,
+		field: validateComparison,
 	},
 };
 

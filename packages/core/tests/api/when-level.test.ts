@@ -441,6 +441,8 @@ describe("writing when", () => {
 			allow("read", "post", { when: { hour: { contains: "1" } } }),
 			// @ts-expect-error a condition names at least one key
 			allow("read", "post", { when: {} }),
+			// @ts-expect-error an environment key is compared with a value, never with another key
+			allow("read", "post", { when: { hour: { gt: { ref: "hour" } } } }),
 			// @ts-expect-error a declaration without an environment takes no when
 			createRules(plainAc).allow("read", "post", { when: { region: "eu" } }),
 		];

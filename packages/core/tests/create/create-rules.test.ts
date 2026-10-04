@@ -327,3 +327,37 @@ describe("a rule's condition on the environment", () => {
 		).toThrow("veto: when.region is undefined");
 	});
 });
+
+describe("a field compared with another field", () => {
+	it("compiles to a ref node in where, and nowhere else", () => {
+		expect(
+			allow("read", "post", { where: { views: { lte: { ref: "views" } } } })
+				.where,
+		).toEqual({ field: "views", op: "lte", ref: "views" });
+		expect(
+			allow(
+				"update",
+				{ post: ["views"] },
+				{
+					values: { views: { lte: { ref: "views" } } as never },
+				},
+			).values,
+		).toEqual({ field: "views", op: "lte", value: { ref: "views" } });
+		expect(
+			allow("read", "post", {
+				where: { views: { in: [{ ref: "views" }] } as never },
+			}).where,
+		).toEqual({ field: "views", op: "in", value: [{ ref: "views" }] });
+
+		expect(
+			allow("read", "post", {
+				where: { status: { contains: { ref: "status" } } as never },
+			}).where,
+		).toEqual({ field: "status", op: "contains", value: { ref: "status" } });
+		expect(
+			allow("read", "post", {
+				where: { views: { lte: { ref: "views", by: 1 } } as never },
+			}).where,
+		).toEqual({ field: "views", op: "lte", value: { ref: "views", by: 1 } });
+	});
+});

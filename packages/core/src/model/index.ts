@@ -4,6 +4,7 @@ export type {
 	ConditionNode,
 	FieldConditionNode,
 	FieldNode,
+	RefNode,
 	WhenNode,
 } from "./condition.js";
 export { RULE_EFFECTS, RuleEffect } from "./effect.js";
@@ -12,6 +13,8 @@ export {
 	CONDITION_OPERATORS,
 	ConditionOperator,
 	isOperator,
+	isRefOperator,
+	refOperators,
 } from "./operator.js";
 export {
 	isQuantifier,
