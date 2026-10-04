@@ -18,7 +18,7 @@ The actor lives in a cookie (the switcher is a server action); the database is a
 
 **The edit form** is the one client subtree, and it is where the rules cross the boundary. The server passes `policyFor(actor)` down as a prop — plain JSON, no class instance, nothing to re-derive — and `<AbilityProvider>` hands it to the form. The form then asks the policy two questions the server would ask:
 
-- `permittedFields("update", "post", ["title", "status", "authorId"])` decides which inputs exist at all, so the form is drawn from the policy instead of from a hand-kept copy of it;
+- `permittedFields("update", "post", post, ["title", "status", "authorId"])` decides which inputs exist at all, so the form is drawn from the policy instead of from a hand-kept copy of it;
 - `validatePayload("update", "post", row, draft)` runs on every change, so a value the rule forbids is refused in the browser before anything is sent.
 
 The form is therefore literally different per role, from one policy and no branching in the component:

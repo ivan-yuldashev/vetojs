@@ -149,11 +149,13 @@ const ability = buildAbility(ac, policyFor(currentUser), {
 ## `permittedFields` — для форм
 
 ```ts
-ability.permittedFields("update", "post", ["title", "status", "views"]);
+ability.permittedFields("update", "post", post, ["title", "status", "views"]);
 // → ["title", "status"]
 ```
 
 Список полей приходится передавать самому: у схемы нельзя спросить её ключи — `shape<T>()` стирается при сборке, а Standard Schema их не перечисляет.
+
+Строка делает ответ точным — тем же, что `validatePayload` даст по каждому полю, поэтому поле, которое `deny` отнимает у этой конкретной строки, из списка выпадает. Если строки под рукой нет, передайте `undefined` — ответ будет оптимистичным, как у `can`: поле, которое правила без строки решить не могут, останется в списке, а `validatePayload` откажет в нём, когда строка станет известна.
 
 Это нужно интерфейсу. На сервере всё равно отработает `validatePayload`: заблокированное поле ввода — вежливость, а не защита.
 

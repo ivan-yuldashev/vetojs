@@ -86,7 +86,7 @@ Return types are inferred from the same place:
 const filter = ability.where("read", "post");
 //    ^? ConditionNode<{ id: string; authorId: string; status: "draft" | "published" }>
 
-const writable = ability.permittedFields("update", "post", ["status"]);
+const writable = ability.permittedFields("update", "post", post, ["status"]);
 //    ^? "status"[]
 
 const forClient = ability.rules;
@@ -167,12 +167,10 @@ The second entry point is [`@vetojs/core/guard`](https://github.com/ivan-yuldash
 
 ```ts
 import { createGuard } from "@vetojs/core/guard";
+import { ac, policyFor } from "./abilities";
+import { getActor } from "./auth";
 
-export const withPermission = createGuard({
-	ac: accessControl,
-	getActor: currentActor,
-	policy: policyFor,
-});
+export const withPermission = createGuard({ ac, getActor, policy: policyFor });
 ```
 
 From there each action names only two things: what it does and to which resource. The wrapper resolves the user, loads the row, validates the payload and only then enters the handler — the same way for a server action, an [HTTP handler](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/http.md) and an [agent tool call](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.md).

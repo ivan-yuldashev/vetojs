@@ -108,7 +108,7 @@ ability.authorize("delete", "post", post); // throws ForbiddenError
 
 The row-less form answers *could this be allowed for any row at all* — it is for deciding whether to render a control, not for guarding an operation on a specific row. If you have the row, pass it.
 
-**Field-level checks.** CASL's `can("update", post, "title")` has no direct twin. Veto separates the questions: `ability.permittedFields("update", "post", fields)` for the UI, and `ability.validatePayload(...)` on the server, which returns the validated data or the exact violations. See [writes](./mutations.md).
+**Field-level checks.** CASL's `can("update", post, "title")` has no direct twin. Veto separates the questions: `ability.permittedFields("update", "post", post, fields)` for the UI, and `ability.validatePayload(...)` on the server, which returns the validated data or the exact violations. See [writes](./mutations.md).
 
 ## React
 

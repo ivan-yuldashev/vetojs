@@ -72,7 +72,7 @@ Methods on `ability`:
 | `authorize(action, resource, row?)` | `void`, throws `ForbiddenError` | server boundaries. **Without a row it does not guess** — it passes only when an `allow` with no `where` covers the action and no `deny` reads the row |
 | `canMutate(action, resource, row)` | `boolean` | may this row be written |
 | `validatePayload(action, resource, row, data)` | `{ ok: true, data } \| { ok: false, violations }` | may this data be written |
-| `permittedFields(action, resource, fields)` | subset of `fields` | driving a form |
+| `permittedFields(action, resource, row, fields)` | subset of `fields` | driving a form |
 | `where(action, resource)` | `ConditionNode` | database filter |
 | `validate(resource, data)` | `{ ok: true, value } \| { ok: false, issues }` | schema check; each issue is `{ message, path? }`, where `path` is the field the schema blamed |
 | `rules` | `CheckedRules` | ship to the client |
@@ -96,6 +96,7 @@ For client components, call the factory once:
 ```ts
 // src/veto.ts — call the factory once, import bindings from here
 import { createVetoContext } from "@vetojs/react";
+import { ac } from "./abilities";
 export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
 	createVetoContext(ac);
 ```

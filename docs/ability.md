@@ -148,11 +148,13 @@ where you write the hook, so a log that needs them can close over them.
 ## `permittedFields` — for forms
 
 ```ts
-ability.permittedFields("update", "post", ["title", "status", "views"]);
+ability.permittedFields("update", "post", post, ["title", "status", "views"]);
 // → ["title", "status"]
 ```
 
 You pass the field universe rather than getting it for free, because a schema can't be asked for its keys — `shape<T>()` is erased at runtime, and Standard Schema doesn't enumerate them either.
+
+The row makes the answer exact — the one `validatePayload` gives for each field, so a field a `deny` takes away from this particular row drops out. Pass `undefined` when the row is not at hand and the answer is optimistic, as it is for `can`: a field the rules cannot settle without a row stays in the list, and `validatePayload` refuses it once the row is known.
 
 This drives the UI. The server still enforces with `validatePayload`; a disabled input is a courtesy, not a control.
 

@@ -86,7 +86,7 @@ ability.can("publish", "post", post);
 const filter = ability.where("read", "post");
 //    ^? ConditionNode<{ id: string; authorId: string; status: "draft" | "published" }>
 
-const writable = ability.permittedFields("update", "post", ["status"]);
+const writable = ability.permittedFields("update", "post", post, ["status"]);
 //    ^? "status"[]
 
 const forClient = ability.rules;
@@ -167,12 +167,10 @@ if (!result.ok) {
 
 ```ts
 import { createGuard } from "@vetojs/core/guard";
+import { ac, policyFor } from "./abilities";
+import { getActor } from "./auth";
 
-export const withPermission = createGuard({
-	ac: accessControl,
-	getActor: currentActor,
-	policy: policyFor,
-});
+export const withPermission = createGuard({ ac, getActor, policy: policyFor });
 ```
 
 Дальше каждое действие называет только две вещи: что оно делает и с каким ресурсом. Обёртка находит пользователя, загружает строку, проверяет payload и лишь потом пускает в обработчик — одинаково для server action, [HTTP-обработчика](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/http.ru.md) и [вызова инструмента агентом](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.ru.md).

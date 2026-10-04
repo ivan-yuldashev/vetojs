@@ -113,7 +113,7 @@ export const useAbility: VetoContext<AC>["useAbility"] = veto.useAbility;
 const ability = useAbility();
 
 const visible = postList.filter((post) => ability.can("read", "post", post));
-const writable = ability.permittedFields("update", "post", ["title", "status"]);
+const writable = ability.permittedFields("update", "post", post, ["title", "status"]);
 
 <input disabled={!writable.includes("title")} />
 ```

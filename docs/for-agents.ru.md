@@ -73,7 +73,7 @@ ability.can("update", "post", post);
 | `authorize(action, resource, row?)` | `void`, бросает `ForbiddenError` | границы на сервере. **Без строки не гадает** — пропускает, только когда действие покрыто `allow` без `where` и ни один `deny` строку не читает |
 | `canMutate(action, resource, row)` | `boolean` | можно ли писать в эту строку |
 | `validatePayload(action, resource, row, data)` | `{ ok: true, data } \| { ok: false, violations }` | можно ли записать эти данные |
-| `permittedFields(action, resource, fields)` | подмножество `fields` | для формы |
+| `permittedFields(action, resource, row, fields)` | подмножество `fields` | для формы |
 | `where(action, resource)` | `ConditionNode` | фильтр для базы |
 | `validate(resource, data)` | `{ ok: true, value } \| { ok: false, issues }` | проверка по схеме; каждая проблема — `{ message, path? }`, где `path` — поле, на которое указала схема |
 | `rules` | `CheckedRules` | отправить клиенту |
@@ -97,6 +97,7 @@ const ability = await getAbility();
 ```ts
 // src/veto.ts — вызовите фабрику один раз, импортируйте привязки отсюда
 import { createVetoContext } from "@vetojs/react";
+import { ac } from "./abilities";
 export const { AbilityProvider, useAbility, useCan, useSetRules, Can } =
 	createVetoContext(ac);
 ```

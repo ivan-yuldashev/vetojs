@@ -149,7 +149,7 @@ The resource schema is derived straight from the `ability` you pass in, so there
 
 ```tsx
 const visible = postList.filter((item) => ability.can("read", "post", item));
-const writable = ability.permittedFields("update", "post", ["title", "status"]);
+const writable = ability.permittedFields("update", "post", post, ["title", "status"]);
 ```
 
 ## Switching actors without extra renders

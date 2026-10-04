@@ -149,7 +149,7 @@ const ability = await getAbility();
 
 ```tsx
 const visible = postList.filter((item) => ability.can("read", "post", item));
-const writable = ability.permittedFields("update", "post", ["title", "status"]);
+const writable = ability.permittedFields("update", "post", post, ["title", "status"]);
 ```
 
 ## Смена пользователя без лишних рендеров
