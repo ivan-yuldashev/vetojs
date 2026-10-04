@@ -1,6 +1,6 @@
 {
 	"name": "@vetojs/core",
-	"version": "0.12.0",
+	"version": "1.0.0",
 	"description": "Authorization for TypeScript apps and the AI agents working in them. Write a permission once: the same rules answer can(), become a SQL WHERE, check writes field by field, and guard server actions, HTTP handlers and agent tool calls for the person the agent acts for.",
 	"keywords": [
 		"authorization",

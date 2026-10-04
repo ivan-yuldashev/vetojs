@@ -1,6 +1,6 @@
 {
 	"name": "@vetojs/react",
-	"version": "0.3.3",
+	"version": "1.0.0",
 	"description": "Your interface shows what the server will actually allow: <Can>, useCan and useAbility read the same @vetojs rules your handlers, queries and agents are checked against, and a server <Can> decides while rendering.",
 	"keywords": [
 		"authorization",
@@ -51,7 +51,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"peerDependencies": {
-		"@vetojs/core": ">=0.4.0 <1",
+		"@vetojs/core": ">=1.0.0",
 		"react": ">=18"
 	},
 	"devDependencies": {

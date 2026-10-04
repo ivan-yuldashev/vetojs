@@ -1,5 +1,67 @@
 # @vetojs/drizzle
 
+## 1.0.0
+
+### Major Changes
+
+- fc6a79f: **`manage` is written in a rule, never asked.** `can`, `cannot`, `authorize` and every other question take an action the resource declares; `can("manage", "post")` no longer compiles, and neither does `<Can I="manage">`, `useCan("manage", …)`, a guarded action named `manage` or `schema.filter(ability, "manage", …)`. A question about `manage` that gets past the types is refused.
+  
+  Asked, `manage` could only say whether some rule reads `manage`: `true` for an owner denied `delete`, `false` for someone granted every action one by one. Ask about the action you mean:
+  
+  ```diff
+  -ability.can("manage", "post");
+  +ability.can("update", "post");
+  ```
+  
+  `ActionFor` still includes `manage` and types what a rule names; `DeclaredAction` types what a question names.
+  
+  **A rule names at least one action.** `allow([], "post")` and `deny([], "post")` no longer compile, nor does a `Rule` written with `action: []`, and `parseRules` refuses one — an empty list matched nothing, so such a `deny` protected nothing. `parseRules` also refuses an empty action or resource name.
+
+### Minor Changes
+
+- aabe66a: **A condition can compare two fields of the same row.** Write `{ ref }` in place of a value under `eq`, `ne`, `gt`, `gte`, `lt` or `lte`:
+  
+  ```ts
+  allow("update", "invoice", { where: { spent: { lte: { ref: "limit" } } } });
+  ```
+  
+  It compiles to `{ "field": "spent", "op": "lte", "ref": "limit" }`. The types offer only fields of the same row whose type matches; inside a relation both fields are the related row's. When either side is missing, `null` or `NaN`, the answer is unknown — an `allow` grants nothing and a `deny` stands — which is how SQL answers `spent <= limit` with a `NULL` on either side, so `can()` and `where()` agree.
+  
+  `parseRules` accepts `ref` only in `where`, only under those six operators, and only in place of a value. `@vetojs/drizzle` translates it into a comparison of the two columns.
+  
+  The browser bundle that parses rules grows by about 170 B gzip, the bundle on trusted rules by about 30 B.
+
+### Patch Changes
+
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [aabe66a]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [2589d22]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [94d92fe]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+- Updated dependencies [fc6a79f]
+  - @vetojs/core@1.0.0
+
 ## 0.2.0
 
 ### Minor Changes
