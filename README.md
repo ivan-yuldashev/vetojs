@@ -23,7 +23,7 @@ Access is usually written three times over: an `if` in the handler, a `WHERE` in
 - **Writes are checked field by field, not wholesale.** [`validatePayload`](docs/mutations.md) inspects every key of the payload and, on refusal, returns `violations: [{ field, reason }]`. That names the field to fix: an API client can answer with it, and a model can correct itself instead of repeating the same call.
 - **Rules can live in a database.** [`parseRules`](docs/parse.md) checks the JSON that arrives at the boundary: a grant it does not recognise is dropped, a **denial** it does not recognise is kept. So a database that ran ahead of the deploy can only narrow access.
 - **Bad data never opens a door.** A wrong-typed field or a missing key answers *unknown*. A grant does not fire on that verdict; a denial does — access can only narrow, never widen.
-- **5.2 kB gzipped.** That is the whole client-side path: validate the rules that arrived, build an ability, check a row. If the rules are already trusted, the size drops to 3.8 kB, and a check inside a server component costs a mere 98 bytes.
+- **5.3 kB gzipped.** That is the whole client-side path: validate the rules that arrived, build an ability, check a row. If the rules are already trusted, the size drops to 3.9 kB, and a check inside a server component costs a mere 98 bytes.
 - **0 dependencies.** One package to update and audit, not a tree.
 - **Runs anywhere JavaScript does.** Node, the browser, Cloudflare Workers, Vercel Edge, Deno, Bun — the same bundle, with no platform branches.
 - **An assistant can pick it up on its own.** The whole API sits on one page — [docs/for-agents.md](docs/for-agents.md) and [llms.txt](llms.txt): hand the link to Claude, Cursor or Copilot and the suggestions land.
@@ -118,9 +118,9 @@ Size matters where the rules travel to the browser. [A test](packages/core/tests
 
 | | CASL | @vetojs |
 |---|---|---|
-| build an ability from trusted rules, check a row | 6.3 kB gzip | **3.8 kB gzip** |
-| the same, having first validated the rules that arrived | no equivalent step | 5.2 kB gzip |
-| the whole package | 6.9 kB gzip | 6.2 kB gzip |
+| build an ability from trusted rules, check a row | 6.3 kB gzip | **3.9 kB gzip** |
+| the same, having first validated the rules that arrived | no equivalent step | 5.3 kB gzip |
+| the whole package | 6.9 kB gzip | 6.8 kB gzip |
 | gate a server component | — | 98 bytes |
 
 [Migrating from CASL](docs/migrate-from-casl.md) maps the API across, names the operators that have no equivalent, and covers the three behaviour differences that can change what your policy decides.

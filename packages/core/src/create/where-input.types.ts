@@ -61,3 +61,17 @@ type WhereInput<AC extends ResourceMap, R extends ResourceName<AC>> = WhereNode<
 	R
 > &
 	Names<WhereKeys<AC, R>>;
+
+type WhenKeys<E> = (Exclude<keyof E, Group> | Group) & string;
+
+type WhenValue<E, K extends string> = K extends Group
+	? K extends "not"
+		? WhenInput<E>
+		: [WhenInput<E>, ...WhenInput<E>[]]
+	: K extends keyof E
+		? FieldValue<E[K]>
+		: never;
+
+export type WhenInput<E> = {
+	[K in WhenKeys<E>]?: WhenValue<E, K>;
+} & Names<WhenKeys<E>>;

@@ -1,9 +1,11 @@
 import {
 	type ConditionNode,
+	type FieldNode,
 	MATCH_QUANTIFIERS,
 	type MatchQuantifier,
 	RelationKind,
 	type Row,
+	type WhenNode,
 } from "../model/index.js";
 import { isPlainObject, own, owns } from "../shared/index.js";
 import {
@@ -23,6 +25,14 @@ export type Shorthand = {
 };
 
 type Quantified = Partial<Record<MatchQuantifier, Shorthand>>;
+
+type Tree<Leaf> =
+	| Leaf
+	| { and: Tree<Leaf>[] }
+	| { or: Tree<Leaf>[] }
+	| { not: Tree<Leaf> };
+
+type LeavesOf<Leaf> = (key: string, value: unknown) => Leaf[];
 
 const relationsOf = (
 	ac: ResourceMap,
@@ -81,21 +91,20 @@ const relationNodes = (
 	});
 };
 
-export const compileWhereInput = (
+const compileTree = <Leaf>(
 	shorthand: Shorthand,
-	ac: ResourceMap,
-	resource: string,
-): ConditionNode<Row> => {
-	const relations = relationsOf(ac, resource);
-	const groups: ConditionNode<Row>[] = [];
-	const keyed: ConditionNode<Row>[] = [];
+	scope: string,
+	leavesOf: LeavesOf<Leaf>,
+): Tree<Leaf> => {
+	const groups: Tree<Leaf>[] = [];
+	const keyed: Tree<Leaf>[] = [];
 
-	const branch = (child: Shorthand): ConditionNode<Row> => {
-		return compileWhereInput(child, ac, resource);
+	const branch = (child: Shorthand): Tree<Leaf> => {
+		return compileTree(child, scope, leavesOf);
 	};
 
 	for (const ownKey of Reflect.ownKeys(shorthand)) {
-		const key = keyNameOf(ownKey, "where");
+		const key = keyNameOf(ownKey, scope);
 
 		if (key === "and") {
 			const nested = shorthand.and;
@@ -127,16 +136,30 @@ export const compileWhereInput = (
 			continue;
 		}
 
-		const value = definedValueOf(shorthand, key, "where");
-		const relation = relations === undefined ? undefined : own(relations, key);
-
-		if (relation !== undefined) {
-			keyed.push(...relationNodes(key, relation, value, ac));
-			continue;
-		}
-
-		keyed.push(fieldNode(key, value, "where"));
+		keyed.push(...leavesOf(key, definedValueOf(shorthand, key, scope)));
 	}
 
 	return combineNodes(groups.length === 0 ? keyed : [...groups, ...keyed]);
+};
+
+export const compileWhereInput = (
+	shorthand: Shorthand,
+	ac: ResourceMap,
+	resource: string,
+): ConditionNode<Row> => {
+	const relations = relationsOf(ac, resource);
+
+	return compileTree<ConditionNode<Row>>(shorthand, "where", (key, value) => {
+		const relation = relations === undefined ? undefined : own(relations, key);
+
+		return relation === undefined
+			? [fieldNode(key, value, "where")]
+			: relationNodes(key, relation, value, ac);
+	});
+};
+
+export const compileWhenInput = (shorthand: Shorthand): WhenNode => {
+	return compileTree<FieldNode<Row>>(shorthand, "when", (key, value) => [
+		fieldNode(key, value, "when"),
+	]);
 };

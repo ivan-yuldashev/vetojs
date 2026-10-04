@@ -1071,6 +1071,32 @@ describe("options planted on the prototype", () => {
 		}
 	});
 
+	it("read no environment the declarations never named", async () => {
+		const asked: unknown[] = [];
+		const unplant = plant("getEnv", (...args: unknown[]) => {
+			asked.push(args);
+
+			return {};
+		});
+
+		try {
+			const withPermission = createGuard({
+				ac,
+				getActor: () => actor,
+				policy: () => [allow("read", "post")],
+			});
+			const readPost = withPermission(
+				{ action: "read", resource: "post" },
+				async () => "read",
+			);
+
+			expect(await readPost()).toBe("read");
+			expect(asked).toEqual([]);
+		} finally {
+			unplant();
+		}
+	});
+
 	it("hear no refusal and no decision", async () => {
 		const heard: unknown[] = [];
 		const unplantDeny = plant("onDeny", (error: unknown) => heard.push(error));
@@ -1097,5 +1123,203 @@ describe("options planted on the prototype", () => {
 		}
 
 		expect(heard).toEqual([]);
+	});
+});
+
+describe("an environment the guard reads per call", () => {
+	type Env = { hour: number; mfa: boolean };
+
+	const envAc = defineAbilities({
+		env: shape<Env>(),
+		resources: { post: { schema: shape<Post>(), actions: ["read", "update"] } },
+	});
+	const onEnv = createRules(envAc);
+	const post: Post = { id: "p1", authorId: "u1", status: "draft" };
+
+	const policy = () => [
+		onEnv.allow("read", "post", {
+			when: { and: [{ hour: { gte: 9 } }, { hour: { lt: 18 } }] },
+		}),
+		onEnv.allow("update", "post"),
+		onEnv.deny("update", "post", { when: { mfa: { ne: true } } }),
+	];
+
+	it("decides every check of the call in the environment getEnv returns", async () => {
+		const at = (env: Env) =>
+			createGuard({
+				ac: envAc,
+				getActor: () => actor,
+				getEnv: () => env,
+				policy,
+			})({ action: "read", resource: "post" }, async () => "read");
+		const write = (env: Env) =>
+			createGuard({
+				ac: envAc,
+				getActor: () => actor,
+				getEnv: () => env,
+				policy,
+			})(
+				{
+					action: "update",
+					resource: "post",
+					load: () => post,
+					payload: () => ({ status: "published" as const }),
+				},
+				async (ctx) => ctx.payload,
+			);
+
+		expect(await at({ hour: 10, mfa: true })()).toBe("read");
+		await expect(at({ hour: 22, mfa: true })()).rejects.toBeInstanceOf(
+			ForbiddenError,
+		);
+		expect(await write({ hour: 22, mfa: true })()).toEqual({
+			status: "published",
+		});
+		await expect(write({ hour: 10, mfa: false })()).rejects.toBeInstanceOf(
+			ForbiddenError,
+		);
+		await expect(write({ hour: 10 } as Env)()).rejects.toBeInstanceOf(
+			ForbiddenError,
+		);
+	});
+
+	it("hands getEnv the arguments the guarded function was called with", async () => {
+		const seen: unknown[][] = [];
+		const guarded = createGuard({
+			ac: envAc,
+			getActor: () => actor,
+			getEnv: (...args) => {
+				seen.push(args);
+
+				return { hour: 10, mfa: true };
+			},
+			policy,
+		})(
+			{ action: "read", resource: "post" },
+			async (_ctx, id: string, flag: boolean) => `${id}:${flag}`,
+		);
+
+		expect(await guarded("p1", true)).toBe("p1:true");
+		expect(seen).toEqual([["p1", true]]);
+	});
+
+	it("reads the environment alongside the actor", async () => {
+		const order: string[] = [];
+		let release = () => {};
+		const actorRead = new Promise<typeof actor>((resolve) => {
+			release = () => resolve(actor);
+		});
+		const guarded = createGuard({
+			ac: envAc,
+			getActor: () => {
+				order.push("actor asked");
+
+				return actorRead;
+			},
+			getEnv: () => {
+				order.push("env asked");
+
+				return { hour: 10, mfa: true };
+			},
+			policy,
+		})({ action: "read", resource: "post" }, async () => "read");
+
+		const call = guarded();
+
+		await Promise.resolve();
+		expect(order).toEqual(["actor asked", "env asked"]);
+		release();
+		expect(await call).toBe("read");
+	});
+
+	it("waits on both reads when one throws before the other settles", async () => {
+		const unobserved: unknown[] = [];
+		const listen = (reason: unknown) => unobserved.push(reason);
+		const guarded = createGuard({
+			ac: envAc,
+			getActor: async () => {
+				throw new Error("no session");
+			},
+			getEnv: () => {
+				throw new Error("no request");
+			},
+			policy,
+		})({ action: "read", resource: "post" }, async () => "read");
+
+		process.on("unhandledRejection", listen);
+
+		try {
+			await expect(guarded()).rejects.toThrow("no session");
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		} finally {
+			process.off("unhandledRejection", listen);
+		}
+
+		expect(unobserved).toEqual([]);
+	});
+
+	it("hands the handler the ability bound to the same environment", async () => {
+		const guarded = createGuard({
+			ac: envAc,
+			getActor: () => actor,
+			getEnv: () => ({ hour: 10, mfa: false }),
+			policy,
+		})({ action: "read", resource: "post" }, async (ctx) => [
+			ctx.ability.can("read", "post", post),
+			ctx.ability.can("update", "post", post),
+		]);
+
+		expect(await guarded()).toEqual([true, false]);
+	});
+
+	it("reports the environment to the decision hook, a missing row included", async () => {
+		const heard: unknown[] = [];
+		const env = { hour: 22, mfa: true };
+		const guard = createGuard({
+			ac: envAc,
+			getActor: () => actor,
+			getEnv: () => env,
+			policy,
+			onDecision: (decision, who, where) =>
+				heard.push([decision.allowed, who, where]),
+		});
+
+		await expect(
+			guard({ action: "read", resource: "post" }, async () => "read")(),
+		).rejects.toBeInstanceOf(ForbiddenError);
+		await expect(
+			guard(
+				{ action: "update", resource: "post", load: () => null },
+				async () => "update",
+			)(),
+		).rejects.toBeInstanceOf(ForbiddenError);
+
+		expect(heard).toEqual([
+			[false, actor, env],
+			[false, actor, env],
+		]);
+	});
+
+	it("asks for getEnv exactly when the declarations name an env", () => {
+		const configured = () => [
+			// @ts-expect-error the declarations name an env, so the guard needs a way to read it
+			createGuard({ ac: envAc, getActor: () => actor, policy }),
+			createGuard({
+				ac: envAc,
+				getActor: () => actor,
+				// @ts-expect-error the environment names every key the declaration does
+				getEnv: () => ({ hour: 10 }),
+				policy,
+			}),
+			createGuard({
+				ac,
+				getActor: () => actor,
+				// @ts-expect-error declarations without an env have nothing to read
+				getEnv: () => ({ hour: 10 }),
+				policy: () => [],
+			}),
+		];
+
+		expect(configured).toBeTypeOf("function");
 	});
 });

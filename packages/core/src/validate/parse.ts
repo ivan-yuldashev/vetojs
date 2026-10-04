@@ -283,6 +283,21 @@ const VALUES_GRAMMAR: ConditionGrammar = {
 	},
 };
 
+const WHEN_GRAMMAR: ConditionGrammar = {
+	nesting: "when",
+	expected: "a condition on the environment",
+	expectedList: "expected an array of conditions",
+	shapes: {
+		and: walkAnd,
+		or: walkOr,
+		not: walkNot,
+		relation: (_node, path, errors) => {
+			errors.push(`${path}: the environment has no relations`);
+		},
+		field: validateFieldNode,
+	},
+};
+
 const validateFields = (
 	fields: unknown,
 	path: string,
@@ -360,6 +375,12 @@ const validateRule = (rule: unknown, path: string, errors: string[]): void => {
 
 	if (values !== undefined) {
 		walkCondition(values, `${path}.values`, errors, 0, VALUES_GRAMMAR);
+	}
+
+	const when = own(rule, "when");
+
+	if (when !== undefined) {
+		walkCondition(when, `${path}.when`, errors, 0, WHEN_GRAMMAR);
 	}
 };
 

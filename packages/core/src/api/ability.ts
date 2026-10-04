@@ -1,11 +1,21 @@
 import { type CheckResult, checkRow } from "../check/index.js";
 import { createSelect, type Select, whereOf } from "../compile/index.js";
-import type { ResourceMap, ValidateResult } from "../create/index.js";
+import type {
+	EnvDeclared,
+	ResourceMap,
+	ValidateResult,
+} from "../create/index.js";
 import { validateSchema } from "../create/index.js";
 import { ForbiddenError } from "../errors/index.js";
 import type { CheckedRule, ConditionNode, Row, Rule } from "../model/index.js";
 import { isRow, own } from "../shared/index.js";
-import type { Ability, AbilityOptions, Decision } from "./ability.types.js";
+import type {
+	Ability,
+	AbilityForEnv,
+	AbilityOptions,
+	Decision,
+	EnvBinding,
+} from "./ability.types.js";
 import { permittedFields, validatePayload } from "./mutation.js";
 import type { PayloadResult } from "./mutation.types.js";
 
@@ -66,12 +76,29 @@ const payloadDecisionOf = (
 	return decision;
 };
 
+type BuildAbility = {
+	<AC extends ResourceMap & EnvDeclared>(
+		ac: AC,
+		policy: readonly CheckedRule[],
+		options?: AbilityOptions,
+	): AbilityForEnv<AC>;
+	<AC extends ResourceMap = ResourceMap>(
+		ac: AC,
+		policy: readonly CheckedRule[],
+		options?: AbilityOptions,
+	): Ability<AC>;
+};
+
+export type BuiltAbility = Ability &
+	Pick<AbilityForEnv, "~veto.withSelect" | "~veto.binding">;
+
 const abilityOf = (
 	ac: ResourceMap,
 	rules: readonly CheckedRule[],
 	onDecision: AbilityOptions["onDecision"],
 	select: Select,
-): Ability => {
+	binding: EnvBinding | undefined,
+): BuiltAbility => {
 	const decide = (
 		action: string,
 		resource: string,
@@ -144,9 +171,28 @@ const abilityOf = (
 					}
 				: validateSchema(own(definition, "schema"), data);
 		},
+		"~veto.binding": binding,
+		"~veto.withSelect": (other: Select, shared: EnvBinding) =>
+			abilityOf(ac, rules, onDecision, other, shared),
 	};
 
-	return ability as Ability;
+	return ability as BuiltAbility;
+};
+
+export const build = (
+	ac: ResourceMap,
+	policy: readonly CheckedRule[],
+	options?: AbilityOptions,
+): BuiltAbility => {
+	const rules = [...policy];
+
+	return abilityOf(
+		ac,
+		rules,
+		options === undefined ? undefined : own(options, "onDecision"),
+		createSelect(rules),
+		undefined,
+	);
 };
 
 /**
@@ -160,6 +206,9 @@ const abilityOf = (
  * nothing. The rule objects stay yours, so build again for a policy that changed rather
  * than editing one in place.
  *
+ * When the declarations name an `env`, what comes back is an {@link AbilityForEnv}: hand
+ * it to {@link withEnv} with the request's environment and ask what that returns.
+ *
  * @param ac - your {@link defineAbilities} declarations
  * @param policy - the rules for one actor
  *
@@ -167,17 +216,10 @@ const abilityOf = (
  * const ability = buildAbility(ac, policyFor(user));
  * ability.can("update", "post", post);
  */
-export const buildAbility = <AC extends ResourceMap = ResourceMap>(
-	ac: AC,
+export const buildAbility: BuildAbility = (
+	ac: ResourceMap,
 	policy: readonly CheckedRule[],
 	options?: AbilityOptions,
-): Ability<AC> => {
-	const rules = [...policy];
-
-	return abilityOf(
-		ac,
-		rules,
-		options === undefined ? undefined : own(options, "onDecision"),
-		createSelect(rules),
-	);
+) => {
+	return build(ac, policy, options) as never;
 };

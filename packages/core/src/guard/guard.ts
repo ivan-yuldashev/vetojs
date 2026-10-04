@@ -1,10 +1,11 @@
 import type { Ability, Decision } from "../api/index.js";
-import { buildAbility } from "../api/index.js";
+import { bindEnv, build } from "../api/index.js";
 import type { ResourceMap } from "../create/index.js";
 import { ForbiddenError } from "../errors/index.js";
 import type { Row } from "../model/index.js";
 import { isRow, own } from "../shared/index.js";
 import type {
+	AnyGuardConfig,
 	GuardConfig,
 	GuardOptions,
 	WithPermission,
@@ -12,6 +13,7 @@ import type {
 
 /**
  * Configures the guard once: how to find the actor, and which policy to build for them.
+ * When the declarations name an `env`, also how to read the environment of one call.
  *
  * Returns `withPermission(options, handler)`, which resolves the actor, builds the policy,
  * loads and checks the row, validates the payload, and only then runs your handler.
@@ -24,9 +26,18 @@ import type {
 export const createGuard = <AC extends ResourceMap, Actor>(
 	config: GuardConfig<AC, Actor>,
 ): WithPermission<AC, Actor> => {
-	const onDeny = own(config, "onDeny");
-	const onUnauthenticated = own(config, "onUnauthenticated");
-	const watch = own(config, "onDecision");
+	const setup: AnyGuardConfig<Actor> = config;
+
+	const onDeny = own(setup, "onDeny");
+	const onUnauthenticated = own(setup, "onUnauthenticated");
+
+	const watch = own(setup, "onDecision");
+	const getEnv = own(setup, "getEnv");
+
+	const readEnv =
+		getEnv === undefined
+			? undefined
+			: async (args: unknown[]): Promise<unknown> => getEnv(...args);
 
 	const deny = (error: ForbiddenError): never => {
 		onDeny?.(error);
@@ -85,7 +96,14 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 		const payloadOf = own(options, "payload");
 
 		const guarded = async (...args: unknown[]): Promise<unknown> => {
-			const actor = await config.getActor();
+			let actor: Actor | null | undefined;
+			let env: unknown;
+
+			if (readEnv === undefined) {
+				actor = await setup.getActor();
+			} else {
+				[actor, env] = await Promise.all([setup.getActor(), readEnv(args)]);
+			}
 
 			if (actor === null || actor === undefined) {
 				onUnauthenticated?.({
@@ -99,13 +117,15 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 			const report =
 				watch === undefined
 					? undefined
-					: (decision: Decision) => watch(decision, actor);
+					: (decision: Decision) => watch(decision, actor, env);
 
-			const ability = buildAbility(
-				config.ac,
-				config.policy(actor),
+			const built = build(
+				setup.ac,
+				setup.policy(actor),
 				report === undefined ? {} : { onDecision: report },
 			);
+
+			const typedAbility = readEnv === undefined ? built : bindEnv(built, env);
 
 			let row: Row | undefined;
 
@@ -129,7 +149,7 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 			const payload = payloadOf === undefined ? undefined : payloadOf(...args);
 
 			const validatedPayload = authorize(
-				ability,
+				typedAbility,
 				options.action,
 				options.resource,
 				row,
@@ -138,7 +158,7 @@ export const createGuard = <AC extends ResourceMap, Actor>(
 
 			const ctx = {
 				actor,
-				ability: ability,
+				ability: typedAbility,
 				row,
 				payload: validatedPayload,
 			};

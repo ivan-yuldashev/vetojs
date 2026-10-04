@@ -287,3 +287,43 @@ describe("array-valued fields take membership operators only", () => {
 		});
 	});
 });
+
+describe("a rule's condition on the environment", () => {
+	const envAc = defineAbilities({
+		env: shape<{ hour: number; region: string }>(),
+		resources: { post: { schema: shape<Post>(), actions: ["read"] } },
+	});
+	const onEnv = createRules(envAc);
+
+	it("compiles to field nodes, and is taken only from the options themselves", () => {
+		expect(
+			onEnv.allow("read", "post", { when: { hour: { gte: 9 }, region: "eu" } }),
+		).toEqual({
+			effect: "allow",
+			action: "read",
+			resource: "post",
+			when: {
+				and: [
+					{ field: "hour", op: "gte", value: 9 },
+					{ field: "region", op: "eq", value: "eu" },
+				],
+			},
+		});
+
+		(Object.prototype as Record<string, unknown>).when = { region: "eu" };
+
+		try {
+			expect(Object.hasOwn(onEnv.allow("read", "post", {}), "when")).toBe(
+				false,
+			);
+		} finally {
+			delete (Object.prototype as Record<string, unknown>).when;
+		}
+	});
+
+	it("names when in a refusal", () => {
+		expect(() =>
+			onEnv.allow("read", "post", { when: { region: undefined } as never }),
+		).toThrow("veto: when.region is undefined");
+	});
+});

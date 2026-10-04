@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildAbility } from "../../src/api/index.js";
+import { buildAbility, withEnv } from "../../src/api/index.js";
 import { createRules, defineAbilities, shape } from "../../src/create/index.js";
 import {
 	ForbiddenError,
@@ -22,6 +22,13 @@ const ac = defineAbilities({
 });
 
 const { allow, deny } = createRules(ac);
+
+const envAc = defineAbilities({
+	env: shape<{ region: string }>(),
+	resources: { post: { schema: shape<Post>(), actions: ["read", "update"] } },
+});
+
+const onEnv = createRules(envAc);
 
 const mine: Post = { id: "p1", authorId: "me", views: 1 };
 const yours: Post = { id: "p2", authorId: "victim", views: 1 };
@@ -211,6 +218,7 @@ describe("a polluted prototype does not reshape a condition", () => {
 			["not", {}],
 			["relation", "author"],
 			["field", "authorId"],
+			["when", {}],
 		];
 
 		it.each<[string, Record<string, unknown>]>([
@@ -250,6 +258,7 @@ describe("a polluted prototype does not reshape a condition", () => {
 					},
 				},
 			],
+			["the environment", { when: { field: "region", op: "eq", value: "eu" } }],
 		])("passes a sound rule on %s whatever the prototype carries", (_, extra) => {
 			const answers = REFUSED_IF_READ.map(([key, value]) => [
 				key,
@@ -355,6 +364,26 @@ describe("a polluted prototype does not reshape a condition", () => {
 				{ op: "ne" },
 				["rules[0].values.and[0].op: unknown operator undefined"],
 			],
+			[
+				"a condition on the environment's operator",
+				rule({ when: { field: "region", value: "eu" } }),
+				{ op: "ne" },
+				["rules[0].when.op: unknown operator undefined"],
+			],
+			[
+				"a condition on the environment's value",
+				rule({ when: { field: "region", op: "eq" } }),
+				{ value: "eu" },
+				["rules[0].when.value: missing"],
+			],
+			[
+				"a condition on the environment's field and operator",
+				rule({ when: { value: "eu" } }),
+				{ field: "region", op: "eq" },
+				[
+					'rules[0].when: a condition names none of "and" | "or" | "not" | "relation" | "field" — a node carries exactly one shape',
+				],
+			],
 		])("refuses %s planted on the prototype", (_, input, planted, errors) => {
 			expect(plant(planted, () => parse(input))).toEqual({ ok: false, errors });
 		});
@@ -383,6 +412,14 @@ describe("a polluted prototype does not reshape a condition", () => {
 			expect(Object.hasOwn(rule, "where")).toBe(false);
 		});
 
+		it("give a rule no condition on the environment it was written without", () => {
+			const rule = under("when", { region: "eu" }, () =>
+				onEnv.deny("read", "post", {}),
+			);
+
+			expect(Object.hasOwn(rule, "when")).toBe(false);
+		});
+
 		it("give a rule no values it was written without", () => {
 			const rule = under("values", { views: 1 }, () =>
 				allow("update", "post", { where: { authorId: "me" } }),
@@ -401,6 +438,47 @@ describe("a polluted prototype does not reshape a condition", () => {
 			);
 
 			expect(where).toEqual({ field: "role", op: "eq", value: "admin" });
+		});
+	});
+
+	describe("a condition on the environment planted on the prototype", () => {
+		const NOWHERE = { field: "region", op: "eq", value: "nowhere" };
+
+		it("leaves an allow written without one granting, bound or not", () => {
+			const answers = under("when", NOWHERE, () => {
+				const ability = buildAbility(envAc, [onEnv.allow("read", "post")]);
+
+				return [
+					(ability as unknown as { can: (...args: unknown[]) => boolean }).can(
+						"read",
+						"post",
+						mine,
+					),
+					withEnv(ability, { region: "eu" }).can("read", "post", mine),
+				];
+			});
+
+			expect(answers).toEqual([true, true]);
+		});
+
+		it("leaves a deny written without one standing, bound or not", () => {
+			const answers = under("when", NOWHERE, () => {
+				const ability = buildAbility(envAc, [
+					onEnv.allow("read", "post"),
+					onEnv.deny("read", "post"),
+				]);
+
+				return [
+					(ability as unknown as { can: (...args: unknown[]) => boolean }).can(
+						"read",
+						"post",
+						mine,
+					),
+					withEnv(ability, { region: "eu" }).can("read", "post", mine),
+				];
+			});
+
+			expect(answers).toEqual([false, false]);
 		});
 	});
 

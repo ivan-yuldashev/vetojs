@@ -3,6 +3,8 @@ export { defineAbilities } from "./define-abilities.js";
 export type {
 	ActionFor,
 	DeclaredAction,
+	EnvDeclared,
+	EnvOf,
 	FieldName,
 	ResourceMap,
 	ResourceName,

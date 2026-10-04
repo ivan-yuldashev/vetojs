@@ -85,6 +85,7 @@ describe("the entry point's surface", () => {
 			"markLoaded",
 			"parseRules",
 			"shape",
+			"withEnv",
 		]);
 		expect(Object.keys(guard)).toEqual(["createGuard"]);
 	});

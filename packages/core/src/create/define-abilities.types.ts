@@ -1,6 +1,21 @@
 import type { MANAGE_ACTION, RelationKind } from "../model/index.js";
 import type { AnySchema, InferSchema } from "./schema.types.js";
 
+declare const declaredEnv: unique symbol;
+
+/**
+ * The mark a {@link defineAbilities} declaration carries when it names an `env` — in the
+ * types alone, never at runtime. Exported so that a declaration can be exported and named.
+ */
+export type EnvDeclared<E = unknown> = { readonly [declaredEnv]: E };
+
+/** The environment declarations `T` name, or `never` when they name none. */
+export type EnvOf<T> = T extends EnvDeclared<infer E> ? E : never;
+
+export type Declared<T, S extends AnySchema> = [S] extends [never]
+	? T
+	: T & EnvDeclared<InferSchema<S>>;
+
 export type Relation<R extends string = string> = {
 	resource: R;
 	kind: RelationKind;

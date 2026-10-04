@@ -850,3 +850,52 @@ describe("one grammar, one dispatcher", () => {
 		).toEqual([expect.stringContaining("values nesting too deep (max 64)")]);
 	});
 });
+
+describe("a condition on the environment", () => {
+	const ruleWith = (when: unknown) => [
+		{ effect: "deny", action: "update", resource: "post", when },
+	];
+
+	it("is walked as a condition that reaches no relation", () => {
+		expect(
+			parseRules(
+				ruleWith({
+					and: [
+						{ field: "hour", op: "gte", value: 9 },
+						{ not: { or: [{ field: "region", op: "eq", value: "eu" }] } },
+					],
+				}),
+			).ok,
+		).toBe(true);
+		expect(
+			parseRules(
+				ruleWith({
+					relation: "author",
+					type: "one",
+					where: { field: "role", op: "eq", value: "admin" },
+				}),
+			),
+		).toEqual({
+			ok: false,
+			errors: ["rules[0].when: the environment has no relations"],
+		});
+		expect(
+			parseRules(ruleWith({ field: "hour", op: "near", value: 9 })),
+		).toEqual({
+			ok: false,
+			errors: ['rules[0].when.op: unknown operator "near"'],
+		});
+	});
+
+	it("is read only from the rule itself", () => {
+		(Object.prototype as Record<string, unknown>).when = { nonsense: true };
+
+		try {
+			expect(
+				parseRules([{ effect: "deny", action: "update", resource: "post" }]).ok,
+			).toBe(true);
+		} finally {
+			delete (Object.prototype as Record<string, unknown>).when;
+		}
+	});
+});

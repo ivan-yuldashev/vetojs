@@ -26,6 +26,12 @@ export type FieldConditionNode<T extends Row> =
 	| FieldNode<T>
 	| { and: FieldConditionNode<T>[] };
 
+export type WhenNode =
+	| FieldNode<Row>
+	| { and: WhenNode[] }
+	| { or: WhenNode[] }
+	| { not: WhenNode };
+
 /**
  * A rule's condition tree: a test on a field, a hop through a relation, or `and` / `or` /
  * `not` over them. Also what {@link Ability.where} returns, for an adapter to turn into

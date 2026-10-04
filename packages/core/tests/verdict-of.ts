@@ -1,11 +1,12 @@
 import type { Ability } from "../src/api/index.js";
-import { buildAbility } from "../src/api/index.js";
+import { buildAbility, withEnv } from "../src/api/index.js";
 import { compileMatcher } from "../src/compile/index.js";
 import type {
 	CheckedRules,
 	ConditionNode,
 	FieldConditionNode,
 	Row,
+	WhenNode,
 } from "../src/model/index.js";
 
 export type Answer = "yes" | "no" | "unknown";
@@ -49,6 +50,37 @@ export const answerOf = (where: ConditionNode<Row>, row: Row): Answer => {
 	}
 
 	return left ? "no" : "unknown";
+};
+
+const bound = (rules: unknown[], env: unknown): Ability =>
+	withEnv(buildAbility({}, rules as CheckedRules) as never, env as never);
+
+export const whenAnswerOf = (when: WhenNode, env: unknown): Answer => {
+	const row = { id: "p1" };
+	const takesPart = asked(
+		bound([{ effect: "allow", action: "update", resource: "post", when }], env),
+		row,
+	);
+	const stands = !asked(
+		bound(
+			[
+				{ effect: "allow", action: "update", resource: "post" },
+				{ effect: "deny", action: "update", resource: "post", when },
+			],
+			env,
+		),
+		row,
+	);
+
+	if (takesPart && !stands) {
+		throw new Error("the allow takes part and the deny does not");
+	}
+
+	if (takesPart) {
+		return "yes";
+	}
+
+	return stands ? "unknown" : "no";
 };
 
 export const sparse = (length: number, filled: Record<number, unknown>) =>

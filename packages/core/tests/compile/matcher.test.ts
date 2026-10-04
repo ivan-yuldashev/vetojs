@@ -669,3 +669,17 @@ describe("compileMatcher", () => {
 		});
 	});
 });
+
+describe("a leaf of one's own", () => {
+	it("reaches every condition nested under and, or and not", () => {
+		const nested = {
+			and: [
+				{ or: [{ field: "x", op: "eq", value: "v" }] },
+				{ not: { not: { field: "y", op: "eq", value: "v" } } },
+			],
+		} as unknown as ConditionNode<Post>;
+
+		expect(compileMatcher(nested, () => () => true)({})).toBe(true);
+		expect(compileMatcher(nested)({})).toBe(false);
+	});
+});

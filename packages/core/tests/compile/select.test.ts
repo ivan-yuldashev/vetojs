@@ -269,3 +269,34 @@ describe("the relations a selection reaches", () => {
 		expect(select("read", "post").reaches).toEqual([]);
 	});
 });
+
+describe("rules with a condition on the environment", () => {
+	const inEu = { field: "region", op: "eq", value: "eu" };
+	const allowInEu = { ...readPost, when: inEu } as Rule;
+	const denyInEu = { ...noRead, when: inEu } as Rule;
+	const rules = [allowInEu, readPost, denyInEu];
+
+	it("leave an allow out only from a selection that reads no environment", () => {
+		expect(named(createSelect(rules)("read", "post"))).toEqual({
+			allow: [readPost],
+			deny: [denyInEu],
+		});
+		expect(named(createSelect(rules, true)("read", "post"))).toEqual({
+			allow: [allowInEu, readPost],
+			deny: [denyInEu],
+		});
+	});
+
+	it("are told apart by the keys a rule owns", () => {
+		(Object.prototype as Record<string, unknown>).when = inEu;
+
+		try {
+			expect(named(createSelect([readPost])("read", "post"))).toEqual({
+				allow: [readPost],
+				deny: [],
+			});
+		} finally {
+			delete (Object.prototype as Record<string, unknown>).when;
+		}
+	});
+});

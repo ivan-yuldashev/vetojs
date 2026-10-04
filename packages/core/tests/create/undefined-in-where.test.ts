@@ -103,12 +103,24 @@ describe("a condition that would vanish is refused", () => {
 		});
 
 		it("names the key an empty operator sits under, in every condition of a rule", () => {
+			const onEnv = createRules(
+				defineAbilities({
+					env: shape<{ hour: number }>(),
+					resources: { post: { schema: shape<Post>(), actions: ["update"] } },
+				}),
+			);
+
 			expect(() =>
 				allow("read", "post", { where: { authorId: { eq: missing } } }),
 			).toThrow(/where\.authorId\.eq is undefined/);
 			expect(() =>
 				allow("update", "post", { values: { orgId: { eq: missing } } }),
 			).toThrow(/values\.orgId\.eq is undefined/);
+			expect(() =>
+				onEnv.allow("update", "post", {
+					when: { hour: { gte: undefined as unknown as number } },
+				}),
+			).toThrow(/when\.hour\.gte is undefined/);
 		});
 
 		it("refuses it on a deny, where it would forbid everything", () => {

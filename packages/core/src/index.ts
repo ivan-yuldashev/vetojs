@@ -1,14 +1,17 @@
 export type {
 	Ability,
+	AbilityForEnv,
 	AbilityOptions,
 	Decision,
 	PayloadResult,
 	PayloadViolation,
 } from "./api/index.js";
-export { buildAbility } from "./api/index.js";
+export { buildAbility, withEnv } from "./api/index.js";
 export type {
 	ActionFor,
 	DeclaredAction,
+	EnvDeclared,
+	EnvOf,
 	ResourceMap,
 	ResourceName,
 	Schema,

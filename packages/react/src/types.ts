@@ -2,9 +2,11 @@ import type {
 	Ability,
 	CheckedRule,
 	DeclaredAction,
+	EnvOf,
 	ResourceMap,
 	ResourceName,
 	ShapeOf,
+	withEnv,
 } from "@vetojs/core";
 import type { ReactNode } from "react";
 
@@ -40,16 +42,28 @@ export type ServerCanProps<
 	fallback?: ReactNode;
 };
 
+type EnvProp<AC extends ResourceMap> = [EnvOf<AC>] extends [never]
+	? { env?: never }
+	: { env: EnvOf<AC> };
+
 /**
  * Props for `AbilityProvider`: either the `rules` that arrived from the server, or an
  * `ability` you already built — never both, which the type enforces.
+ *
+ * When the declarations name an `env`, `rules` come with the `env` to bind them to. It is
+ * compared key by key, so a literal written in the render does not rebind on every render,
+ * and a change rebinds the rules — the ones set through `useSetRules` included.
  */
 export type AbilityProviderProps<AC extends ResourceMap> = {
 	children?: ReactNode;
 } & (
-	| { rules: readonly CheckedRule[]; ability?: never }
-	| { ability: Ability<AC>; rules?: never }
+	| ({ rules: readonly CheckedRule[]; ability?: never } & EnvProp<AC>)
+	| { ability: Ability<AC>; rules?: never; env?: never }
 );
+
+export type EnvBinding<AC extends ResourceMap> = [EnvOf<AC>] extends [never]
+	? []
+	: [bind: typeof withEnv];
 
 /**
  * What {@link createVetoContext} returns: the provider, the hooks and the `<Can>`

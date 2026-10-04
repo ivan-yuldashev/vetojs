@@ -4,13 +4,17 @@ import { only, own } from "../shared/index.js";
 import { compileValues } from "./condition-shorthand.js";
 import type { RuleFactory } from "./create-rules.types.js";
 import type { ResourceMap } from "./define-abilities.types.js";
-import { compileWhereInput, type Shorthand } from "./where-input.js";
+import {
+	compileWhenInput,
+	compileWhereInput,
+	type Shorthand,
+} from "./where-input.js";
 
 type Fields = NonNullable<Rule["fields"]>;
 
 type TargetInput = string | Readonly<Record<string, Fields | undefined>>;
 
-type Options = { where?: Shorthand; values?: Row };
+type Options = { where?: Shorthand; values?: Row; when?: Shorthand };
 
 const EMPTY_OPTIONS: Options = {};
 
@@ -50,6 +54,7 @@ const makeRule = (
 
 	const where = own(options, "where");
 	const values = own(options, "values");
+	const when = own(options, "when");
 
 	if (where !== undefined) {
 		rule.where = compileWhereInput(where, ac, resource);
@@ -61,6 +66,10 @@ const makeRule = (
 
 	if (values !== undefined) {
 		rule.values = compileValues(values);
+	}
+
+	if (when !== undefined) {
+		rule.when = compileWhenInput(when);
 	}
 
 	return rule;

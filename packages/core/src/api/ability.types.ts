@@ -1,3 +1,4 @@
+import type { Select } from "../compile/index.js";
 import type {
 	DeclaredAction,
 	FieldName,
@@ -6,7 +7,7 @@ import type {
 	ShapeOf,
 	ValidateResult,
 } from "../create/index.js";
-import type { CheckedRule, ConditionNode, Rule } from "../model/index.js";
+import type { CheckedRule, ConditionNode, Env, Rule } from "../model/index.js";
 import type { PayloadResult, PayloadViolation } from "./mutation.types.js";
 
 /**
@@ -143,6 +144,32 @@ export type Ability<AC extends ResourceMap = ResourceMap> = {
 		resource: R,
 		data: unknown,
 	): ValidateResult<ShapeOf<AC, R>>;
+};
+
+declare const forEnv: unique symbol;
+
+/**
+ * What {@link buildAbility} returns when the declarations name an `env`: the rules, and
+ * nothing to ask until {@link withEnv} binds an environment, because a rule's `when` cannot
+ * be read without one.
+ */
+export type AbilityForEnv<AC extends ResourceMap = ResourceMap> = {
+	/** The rules this ability was built from, as on {@link Ability.rules}. */
+	readonly rules: readonly CheckedRule[];
+	readonly [forEnv]: AC;
+	/** Not part of the API: how {@link withEnv} builds the ability it returns. */
+	readonly "~veto.withSelect": (
+		select: Select,
+		binding: EnvBinding,
+	) => Ability<AC>;
+	/** Not part of the API: the environment {@link withEnv} last bound these rules to. */
+	"~veto.binding": EnvBinding | undefined;
+};
+
+export type EnvBinding = {
+	select: Select;
+	env: Env | undefined;
+	ability: Ability | undefined;
 };
 
 /**

@@ -1,9 +1,10 @@
 import type { Rule } from "../model/index.js";
 import { MANAGE_ACTION, RuleEffect } from "../model/index.js";
+import { owns } from "../shared/index.js";
 import { reachesOf } from "./reads.js";
 import { compileRule } from "./rule.js";
 import type { CompiledRule } from "./rule.types.js";
-import type { RulesByEffect, Select } from "./select.types.js";
+import type { RulesByEffect, Select, WhenState } from "./select.types.js";
 
 type Resource = {
 	rules: Rule[];
@@ -17,17 +18,20 @@ const EMPTY_RULES_BY_EFFECT: RulesByEffect = {
 	deny: [],
 	rowDeny: [],
 	reaches: [],
+	when: undefined,
 };
 
-const rulesByEffectOf = (
+export const rulesByEffectOf = (
 	allow: readonly CompiledRule[],
 	deny: readonly CompiledRule[],
+	when: WhenState | null | undefined,
 ): RulesByEffect => {
 	return {
 		allow,
 		deny,
 		rowDeny: deny.filter((compiled) => !compiled.isFieldLevel),
 		reaches: reachesOf([...allow, ...deny]),
+		when,
 	};
 };
 
@@ -64,7 +68,11 @@ const resourcesOf = (rules: readonly Rule[]): Map<string, Resource> => {
 	return resources;
 };
 
-const selectRules = (rules: readonly Rule[], action: string): RulesByEffect => {
+const selectRules = (
+	rules: readonly Rule[],
+	action: string,
+	readsEnv: boolean,
+): RulesByEffect => {
 	const allow: CompiledRule[] = [];
 	const deny: CompiledRule[] = [];
 
@@ -73,13 +81,23 @@ const selectRules = (rules: readonly Rule[], action: string): RulesByEffect => {
 			continue;
 		}
 
-		(rule.effect === RuleEffect.Allow ? allow : deny).push(compileRule(rule));
+		if (rule.effect !== RuleEffect.Allow) {
+			deny.push(compileRule(rule));
+			continue;
+		}
+
+		if (readsEnv || !owns(rule, "when")) {
+			allow.push(compileRule(rule));
+		}
 	}
 
-	return rulesByEffectOf(allow, deny);
+	return rulesByEffectOf(allow, deny, undefined);
 };
 
-export const createSelect = (rules: readonly Rule[]): Select => {
+export const createSelect = (
+	rules: readonly Rule[],
+	readsEnv = false,
+): Select => {
 	let resources: Map<string, Resource> | undefined;
 	let lastAction = "";
 	let lastResource = "";
@@ -103,7 +121,7 @@ export const createSelect = (rules: readonly Rule[]): Select => {
 		}
 
 		if (entry.rules.some((rule) => names(rule, action))) {
-			const rulesByEffect = selectRules(entry.rules, action);
+			const rulesByEffect = selectRules(entry.rules, action, readsEnv);
 
 			entry.byAction.set(action, rulesByEffect);
 
@@ -115,7 +133,7 @@ export const createSelect = (rules: readonly Rule[]): Select => {
 		}
 
 		if (entry.wildcard === undefined) {
-			entry.wildcard = selectRules(entry.rules, MANAGE_ACTION);
+			entry.wildcard = selectRules(entry.rules, MANAGE_ACTION, readsEnv);
 		}
 
 		return entry.wildcard;

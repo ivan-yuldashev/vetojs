@@ -14,11 +14,11 @@ import {
 
 const runOnItem = (item: Row, matcher: Matcher): Verdict => matcher(item);
 
-const rowLeaf =
-	<T extends Row>(node: FieldNode<T>): Matcher =>
-	(row) => {
-		return evaluateOperator(node.op, own(row, node.field), node.value);
-	};
+export type LeafOf = <T extends Row>(node: FieldNode<T>) => Matcher;
+
+const rowLeaf: LeafOf = (node) => (row) => {
+	return evaluateOperator(node.op, own(row, node.field), node.value);
+};
 
 const compileRelation = <T extends Row>(
 	node: Extract<ConditionNode<T>, { relation: string }>,
@@ -51,21 +51,22 @@ const compileRelation = <T extends Row>(
 
 export const compileMatcher = <T extends Row>(
 	node: ConditionNode<T>,
+	leafOf: LeafOf = rowLeaf,
 ): Matcher => {
 	if (owns(node, "field")) {
-		return rowLeaf(node);
+		return leafOf(node);
 	}
 
 	if (owns(node, "and")) {
-		return allOf(node.and.map((child) => compileMatcher(child)));
+		return allOf(node.and.map((child) => compileMatcher(child, leafOf)));
 	}
 
 	if (owns(node, "or")) {
-		return anyOf(node.or.map((child) => compileMatcher(child)));
+		return anyOf(node.or.map((child) => compileMatcher(child, leafOf)));
 	}
 
 	if (owns(node, "not")) {
-		const inner = compileMatcher(node.not);
+		const inner = compileMatcher(node.not, leafOf);
 
 		return (row) => kleeneNot(inner(row));
 	}

@@ -4,8 +4,10 @@ export type {
 	ConditionNode,
 	FieldConditionNode,
 	FieldNode,
+	WhenNode,
 } from "./condition.js";
 export { RULE_EFFECTS, RuleEffect } from "./effect.js";
+export type { Env } from "./env.js";
 export {
 	CONDITION_OPERATORS,
 	ConditionOperator,

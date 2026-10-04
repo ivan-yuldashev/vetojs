@@ -2,12 +2,18 @@ import type { CheckedRule, RuleEffect } from "../model/index.js";
 import type { ValuesCondition } from "./condition-shorthand.types.js";
 import type {
 	ActionFor,
+	EnvOf,
 	FieldName,
 	ResourceMap,
 	ResourceName,
 	ShapeOf,
 } from "./define-abilities.types.js";
-import type { StatedKey, WhereKeys, WhereNode } from "./where-input.types.js";
+import type {
+	StatedKey,
+	WhenInput,
+	WhereKeys,
+	WhereNode,
+} from "./where-input.types.js";
 
 type FieldTarget<AC extends ResourceMap> = {
 	readonly [R in ResourceName<AC>]?: readonly [
@@ -62,6 +68,10 @@ type Where<
 	WK extends WhereKeys<AC, R> | StatedKey,
 > = WhereNode<AC, R> & Record<WK, unknown>;
 
+type When<AC extends ResourceMap> = [EnvOf<AC>] extends [never]
+	? never
+	: WhenInput<EnvOf<AC>>;
+
 type Options<
 	AC extends ResourceMap,
 	T,
@@ -70,6 +80,7 @@ type Options<
 > = {
 	where?: Where<AC, NameOf<AC, T>, WK>;
 	values?: Values<AC, NameOf<AC, T>, F>;
+	when?: When<AC>;
 };
 
 export type RuleFactory<AC extends ResourceMap, E extends RuleEffect> = <
