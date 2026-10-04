@@ -1,7 +1,7 @@
 {
 	"name": "@vetojs/drizzle",
 	"version": "0.2.0",
-	"description": "Drizzle ORM adapter for @vetojs — compiles rule conditions into SQL WHERE with engine-faithful fail-closed semantics.",
+	"description": "Permissions as SQL for Drizzle: the @vetojs policy becomes a WHERE, so a query — a user's or their agent's — returns exactly the rows can() allows. Tested against Postgres, NULLs included.",
 	"keywords": [
 		"authorization",
 		"permissions",

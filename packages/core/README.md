@@ -1,10 +1,8 @@
 # ⚡ @vetojs/core
 
-> Authorization for TypeScript: which of your users may do what in your application. Rules are plain JSON, types infer themselves, 0 dependencies.
+> Write a permission once: the same rules answer `can()`, become the `WHERE` of a query, check a write field by field and guard a server action, an HTTP handler or an AI agent's tool call.
 
 [![NPM version](https://img.shields.io/npm/v/%40vetojs%2Fcore)](https://www.npmjs.com/package/@vetojs/core)
-[![Bundle size](https://img.shields.io/bundlejs/size/%40vetojs%2Fcore)](https://bundlejs.com/?q=%40vetojs%2Fcore)
-[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/@vetojs/core?activeTab=dependencies)
 [![License](https://img.shields.io/npm/l/%40vetojs%2Fcore)](https://github.com/ivan-yuldashev/vetojs/blob/main/LICENSE)
 [![Socket](https://socket.dev/api/badge/npm/package/@vetojs/core)](https://socket.dev/npm/package/@vetojs/core)
 
@@ -12,15 +10,15 @@ The engine of [`@vetojs`](https://github.com/ivan-yuldashev/vetojs#readme) — *
 
 Authorization answers the question "may *this* user do *this* to *this* row". Here the answer comes from a policy — a pure function that takes a user (or any other context) and returns an array of rules as plain JSON.
 
-That one array covers three places at once: the check in your code (`ability.can("update", "post", post)`), the `WHERE` condition for a database query, and the list of fields the user is allowed to write.
+That one array covers every place the question comes up: the check in your code (`ability.can("update", "post", post)`), the `WHERE` condition for a database query, the list of fields the user is allowed to write, and the tool call an agent makes on the user's behalf.
 
 ## Why @vetojs/core
 
-- **Types infer themselves.** One `defineAbilities` declaration — from there your editor fills in actions, resources, fields and operators. No hand-written generics, no `any`.
-- **Zero overhead.** 0 dependencies, ESM only, `sideEffects: false`. Building an ability and checking a row is 4.0 kB gzip; with validation of the rules that arrived, 5.4 kB.
-- **Runs anywhere JavaScript does.** Node, the browser, Cloudflare Workers, Vercel Edge, Deno, Bun — the same bundle, with no platform branches.
-- **No hidden state.** Bar two error classes, there are no classes in the package. `buildAbility` mutates nothing and caches nothing between requests.
-- **An assistant can pick it up on its own.** The whole API sits on one page — [docs/for-agents.md](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/for-agents.md) and [llms.txt](https://github.com/ivan-yuldashev/vetojs/blob/main/llms.txt): hand the link to Claude, Cursor or Copilot and the suggestions land.
+- **One policy for every entry point.** `can()` in code, `where()` for the query, `validatePayload` for a write, `createGuard` around a server action, an HTTP handler or an agent's tool call — all of them read the same array.
+- **The query returns what the check allows.** `ability.where()` gives the condition tree a `WHERE` is compiled from, and a test holds it to the rows `can()` selects — on messy data too.
+- **A refusal names the field.** `violations: [{ field, reason }]` — an API client can answer with it, and a model can fix its argument instead of repeating the call.
+- **An agent touches only what its person could.** The guard loads the row the model named and checks it against the policy of the person the agent acts for, before your handler runs.
+- **Bad data narrows access, never widens it.** A wrong-typed field or a missing key answers *unknown*: an `allow` grants nothing on it, a `deny` still fires.
 
 ---
 
@@ -105,21 +103,6 @@ allow("read", "post", { where: { statuz: "published" } });
 allow("read", "post", { where: { status: "archived" } });
 //                                       ^^^^^^^^^^ ✗ Type '"archived"' is not assignable to type '"draft" | "published" | ScalarOperators<…>'
 ```
-
-## How it differs from CASL
-
-CASL is the most widely used authorization library in the ecosystem, so that is what this compares against:
-
-| Task | CASL | @vetojs/core |
-|---|---|---|
-| Dependencies | 1 direct, 4 in the tree | **0** |
-| Build an ability and check a row | 6.3 kB gzip | **4.0 kB gzip** |
-| Send permissions to the client | rebuild: `createMongoAbility(rules)` | the same array: `buildAbility(ac, rules)` |
-| Declare actions and resources | list them as pairs in a generic | inferred from `defineAbilities` |
-| Filter a database query | an adapter per ORM, and none for SQL | `ability.where()` returns a condition tree the `WHERE` is built from |
-| RSC and edge runtimes | — | supported |
-
-The figures come from [a test](https://github.com/ivan-yuldashev/vetojs/blob/main/packages/core/tests/readme-size.test.ts): both libraries go through esbuild, minification and gzip; the comparison was run against `@casl/ability@7.0.1`. [Migrating from CASL](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/migrate-from-casl.md) maps the API across line by line.
 
 ## Core API
 
@@ -209,6 +192,28 @@ The convention is the one your ORM uses: `undefined` means the relation was not 
 
 If you assembled the row not by query but by hand — stitched from two responses, pulled from a cache — the engine has to be told: `markLoaded(post, "author", author)` returns a copy tagged "the author is loaded". Without it the relation counts as unloaded and `can()` throws ([more about relations](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.md)).
 
+## How it's built
+
+- **Types infer themselves.** One `defineAbilities` declaration — from there your editor fills in actions, resources, fields and operators. No hand-written generics, no `any`.
+- **Small, with nothing underneath.** Building an ability and checking a row is 3.9 kB gzip; with validation of the rules that arrived, 5.5 kB. 0 dependencies, ESM only, `sideEffects: false`.
+- **No hidden state.** Bar two error classes, there are no classes in the package. `buildAbility` mutates nothing and caches nothing between requests.
+- **Runs anywhere JavaScript does.** Node, the browser, Cloudflare Workers, Vercel Edge, Deno, Bun — the same bundle, with no platform branches.
+
+## Compared with CASL
+
+CASL is the most widely used authorization library in the ecosystem. If you are choosing between the two or moving across:
+
+| Task | CASL | @vetojs/core |
+|---|---|---|
+| Dependencies | 1 direct, 4 in the tree | **0** |
+| Build an ability and check a row | 6.3 kB gzip | **3.9 kB gzip** |
+| Send permissions to the client | rebuild: `createMongoAbility(rules)` | the same array: `buildAbility(ac, rules)` |
+| Declare actions and resources | list them as pairs in a generic | inferred from `defineAbilities` |
+| Filter a database query | an adapter per ORM, and none for SQL | `ability.where()` returns a condition tree the `WHERE` is built from |
+| RSC and edge runtimes | — | supported |
+
+The figures come from [a test](https://github.com/ivan-yuldashev/vetojs/blob/main/packages/core/tests/readme-size.test.ts): both libraries go through esbuild, minification and gzip; the comparison was run against `@casl/ability@7.0.1`. [Migrating from CASL](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/migrate-from-casl.md) maps the API across line by line.
+
 ## Contributing
 
 Missing an operator, a scenario that does not fit, an error message that gets in the way — [tell us in an issue](https://github.com/ivan-yuldashev/vetojs/issues/new). Wishes for the API are read alongside bug reports, and they shape what gets done next.
@@ -218,6 +223,7 @@ The workflow is described in [CONTRIBUTING.md](https://github.com/ivan-yuldashev
 ## What's next
 
 - **[Documentation](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/README.md)** — detailed pages on every concept: from declaring resources to SQL filtering.
+- **[Agents](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/agents.md)** — guarding tool calls with the same policy, the per-field refusal a model can act on, and effects with no row behind them.
 - **[For agents](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/for-agents.md)** and **[llms.txt](https://github.com/ivan-yuldashev/vetojs/blob/main/llms.txt)** — the whole API on one page, sized to fit an AI assistant's context: hand the link to Claude, Cursor or Copilot.
 - **Examples** — three runnable demos over one multi-tenant domain: [react-spa](https://github.com/ivan-yuldashev/vetojs/tree/main/examples/react-spa), [next-app](https://github.com/ivan-yuldashev/vetojs/tree/main/examples/next-app) and [drizzle-pg](https://github.com/ivan-yuldashev/vetojs/tree/main/examples/drizzle-pg), where `can()` and the compiled `WHERE` are compared row by row.
 

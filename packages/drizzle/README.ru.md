@@ -1,9 +1,8 @@
 # ⚡ @vetojs/drizzle
 
-> Права доступа как SQL: политика превращается в `WHERE`, и запрос возвращает ровно те строки, которые пользователю разрешено видеть.
+> Права доступа как SQL: политика превращается в `WHERE`, и запрос возвращает ровно те строки, которые разрешено видеть пользователю — или агенту, который действует от его имени.
 
 [![NPM version](https://img.shields.io/npm/v/%40vetojs%2Fdrizzle)](https://www.npmjs.com/package/@vetojs/drizzle)
-[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/@vetojs/drizzle?activeTab=dependencies)
 [![Postgres](https://img.shields.io/badge/postgres-supported-336791)](https://orm.drizzle.team)
 [![License](https://img.shields.io/npm/l/%40vetojs%2Fdrizzle)](https://github.com/ivan-yuldashev/vetojs/blob/main/LICENSE)
 [![Socket](https://socket.dev/api/badge/npm/package/@vetojs/drizzle)](https://socket.dev/npm/package/@vetojs/drizzle)
@@ -19,7 +18,7 @@ SQL-сторона движка [`@vetojs`](https://github.com/ivan-yuldashev/ve
 - **Права пишутся один раз.** Условие для `WHERE` собирается из тех же правил, по которым отвечает `can()`. Отдельного описания доступа для SQL заводить не нужно.
 - **Совпадение проверено, а не заявлено.** Сетка на соответствие гоняет оба пути — `can()` по загруженным строкам и настоящий `SELECT` — на живом Postgres, по строкам с `NULL` в каждой колонке, и требует совпадения множеств идентификаторов.
 - **Джойны выводятся сами.** Связи собираются по внешним ключам, уже объявленным в вашей схеме. Писать джойн руками приходится только там, где условие сложнее совпадения ключей.
-- **0 зависимостей.** `@vetojs/core` и `drizzle-orm` — peer-зависимости.
+- **Поиск агента видит то, что можно его человеку.** Инструмент, который ищет или выводит список через `schema.filter`, отдаёт строки, доступные человеку, за которого действует агент, а не всё, до чего дотягивается сервер.
 
 ---
 
@@ -33,7 +32,7 @@ npm install @vetojs/drizzle @vetojs/core drizzle-orm
 pnpm add @vetojs/drizzle @vetojs/core drizzle-orm
 ```
 
-Только ESM, Node.js 20 и новее. Пока Postgres.
+Только ESM, Node.js 20 и новее. Пока Postgres. `@vetojs/core` и `drizzle-orm` — peer-зависимости, больше пакет ничего в дерево не добавляет.
 
 ### 2. Свяжите ресурсы с таблицами
 
@@ -96,8 +95,6 @@ schema.filter(ability, "archive", "post");
 | `UPDATE` и `DELETE` | «прочитать, потом проверить», между ними окно | тот же предикат в `WHERE`, окна нет |
 | Совпадение с `can()` | на вашей совести | сверяется тестом на живом Postgres |
 
-У CASL похожую задачу решает `accessibleBy`, но ему нужен адаптер под конкретную ORM. Для Prisma и Mongoose такие адаптеры есть, а для SQL и Sequelize [запрос открыт с 2017 года](https://github.com/stalniy/casl/issues/8) — то есть на Drizzle этот путь просто недоступен, и правила пришлось бы переписывать в `WHERE` руками, второй раз и без сверки с `can()`.
-
 ## Тот же предикат на записи
 
 `WHERE` уместен и в `UPDATE`, и в `DELETE`:
@@ -128,6 +125,10 @@ const condition = toDrizzle(ability.where("read", "post"), posts);
 ```
 
 Связи так не разворачиваются — `toDrizzle` работает по одной таблице.
+
+## Сравнение с CASL
+
+У CASL похожую задачу решает `accessibleBy`, но ему нужен адаптер под конкретную ORM. Для Prisma и Mongoose такие адаптеры есть, а для SQL и Sequelize [запрос открыт с 2017 года](https://github.com/stalniy/casl/issues/8) — то есть на Drizzle этот путь просто недоступен, и правила пришлось бы переписывать в `WHERE` руками, второй раз и без сверки с `can()`.
 
 ## Contributing
 

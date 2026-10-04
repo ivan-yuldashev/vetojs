@@ -2,7 +2,7 @@
 	"name": "veto",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Type-safe authorization for TypeScript: plain-JSON rules that answer can(), compile to SQL and gate writes field by field.",
+	"description": "Authorization for TypeScript apps and the AI agents working in them: one policy answers can(), filters SQL queries, checks writes field by field and guards tool calls.",
 	"type": "module",
 	"license": "MIT",
 	"packageManager": "pnpm@10.20.0",

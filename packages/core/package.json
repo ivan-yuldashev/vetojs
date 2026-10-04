@@ -1,7 +1,7 @@
 {
 	"name": "@vetojs/core",
 	"version": "0.12.0",
-	"description": "Type-safe authorization for TypeScript, with no classes and no hidden state. Rules are plain JSON: they cross the server/client boundary, answer can(), gate writes field by field, and become a SQL WHERE through the Drizzle adapter. One guard covers server actions, HTTP handlers and agent tool calls. Zero dependencies.",
+	"description": "Authorization for TypeScript apps and the AI agents working in them. Write a permission once: the same rules answer can(), become a SQL WHERE, check writes field by field, and guard server actions, HTTP handlers and agent tool calls for the person the agent acts for.",
 	"keywords": [
 		"authorization",
 		"permissions",
@@ -12,6 +12,8 @@
 		"guard",
 		"mcp",
 		"ai-agents",
+		"tool-calling",
+		"llm",
 		"casl-alternative",
 		"typescript"
 	],

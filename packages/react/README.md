@@ -1,9 +1,8 @@
 # ⚡ @vetojs/react
 
-> Authorization in React: the same rules decide what is allowed on the server and what the interface shows.
+> Your interface shows what the server will actually allow: `<Can>` and the hooks read the very rules your handlers, queries and agents are checked against.
 
 [![NPM version](https://img.shields.io/npm/v/%40vetojs%2Freact)](https://www.npmjs.com/package/@vetojs/react)
-[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/@vetojs/react?activeTab=dependencies)
 [![React](https://img.shields.io/badge/react-%E2%89%A518-61dafb)](https://react.dev)
 [![License](https://img.shields.io/npm/l/%40vetojs%2Freact)](https://github.com/ivan-yuldashev/vetojs/blob/main/LICENSE)
 [![Socket](https://socket.dev/api/badge/npm/package/@vetojs/react)](https://socket.dev/npm/package/@vetojs/react)
@@ -16,10 +15,10 @@ This package wires that very array into React. Buttons, tabs and lists ask it wh
 
 ## Why @vetojs/react
 
-- **Types infer themselves.** `createVetoContext(ac)` closes over your schema: `<Can>` suggests the actions available to that specific resource and rejects the ones that don't exist.
-- **RSC with no client boundary.** `@vetojs/react/server` gates a server component for **98 bytes** — no directives, no hooks, no context in the browser.
-- **Targeted re-renders.** `useCan` subscribes to one verdict and wakes only the row whose answer changed.
-- **0 dependencies.** `react` and `@vetojs/core` are peer dependencies; the package adds nothing of its own to the tree.
+- **One copy of the access logic.** Buttons, tabs and lists ask the array the server already enforces, so the interface cannot drift from the permissions that are real.
+- **A server component decides on the server.** `<Can>` from `@vetojs/react/server` picks the markup while rendering, and only the chosen branch reaches the browser — no directive, no hook, no context.
+- **One row re-renders, not the list.** `useCan` subscribes to one verdict and wakes only the row whose answer changed.
+- **Switch the actor without re-rendering the tree.** `useSetRules` writes new rules straight into the store, and only the verdicts that change update.
 
 ---
 
@@ -169,6 +168,12 @@ Components higher up the tree are left alone, and only the rows whose verdict ac
 ## Hiding a button is not protecting the data
 
 A hidden interface element is a courtesy to the user, not protection: the request that button would have sent can be sent by hand. Every action is still checked on the server — by [the guard](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/guard.md) or by `ability.authorize()`. The value of this package is elsewhere: the server and the interface read one array of rules, so the UI cannot drift away from the permissions that are real.
+
+## How it's built
+
+- **Types infer themselves.** `createVetoContext(ac)` closes over your schema: `<Can>` suggests the actions available to that specific resource and rejects the ones that don't exist.
+- **98 bytes on the server.** That is what `<Can>` from `@vetojs/react/server` costs to gate a server component.
+- **0 dependencies.** `react` and `@vetojs/core` are peer dependencies; the package adds nothing of its own to the tree.
 
 ## Roadmap
 
