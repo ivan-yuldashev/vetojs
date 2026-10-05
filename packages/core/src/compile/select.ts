@@ -18,7 +18,7 @@ const EMPTY_RULES_BY_EFFECT: RulesByEffect = {
 	deny: [],
 	rowDeny: [],
 	reaches: [],
-	when: undefined,
+	when: null,
 };
 
 export const rulesByEffectOf = (

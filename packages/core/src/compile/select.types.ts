@@ -7,7 +7,6 @@ type WhenEntry = { compiled: CompiledRule; match: Matcher };
 
 export type WhenState = {
 	entries: readonly WhenEntry[];
-	byKey: Map<string, RulesByEffect>;
 	last: [env: Env, resolved: RulesByEffect] | undefined;
 };
 
