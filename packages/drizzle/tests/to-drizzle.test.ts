@@ -539,6 +539,8 @@ describe("toDrizzle — edge semantics", () => {
 				],
 				["id", "gt", 5, [], []],
 				["tag", "contains", "x", [], EVERY_ROW],
+				["status", "gt", "b", [], ["null-status"]],
+				["tag", "gt", "b", [], ["null-author", "null-status", "null-views"]],
 				["labels", "contains", "x", [], ["null-views"]],
 			];
 
@@ -663,5 +665,31 @@ describe("toDrizzle — edge semantics", () => {
 			allow("read", "post", { where: { status: { contains: "%_" } } }),
 		]);
 		expect(visible).toEqual(["percent"]);
+	});
+
+	it("each LIKE metacharacter in contains is matched literally on its own", async () => {
+		await db.insert(posts).values(
+			["a\\b", "a%b", "a_b", "ab"].map((status, index) => ({
+				id: `meta-${index}`,
+				authorId: "u3",
+				status,
+				views: 1,
+				publishedAt: null,
+				tag: null,
+				labels: null,
+			})),
+		);
+
+		for (const [needle, holder] of [
+			["\\", "meta-0"],
+			["%", "meta-1"],
+			["_", "meta-2"],
+		] as const) {
+			const visible = await expectIdentity([
+				allow("read", "post", { where: { status: { contains: needle } } }),
+			]);
+
+			expect(visible).toContain(holder);
+		}
 	});
 });

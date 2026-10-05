@@ -320,10 +320,7 @@ describe("the shape of a value constraint", () => {
 				{ field: "title", op: "contains", value: 5 },
 				'expected a string for "contains"',
 			],
-			[
-				{ field: "views", op: "gt", value: null },
-				'expected a number or a string for "gt"',
-			],
+			[{ field: "views", op: "gt", value: null }, 'expected a number for "gt"'],
 			[{ field: "status", op: "like", value: "d" }, 'unknown operator "like"'],
 		];
 

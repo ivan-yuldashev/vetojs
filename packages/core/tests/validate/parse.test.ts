@@ -650,19 +650,23 @@ describe("the refusals each level relies on", () => {
 		],
 		[
 			{ where: node("views", "gt", null) },
-			'rules[0].where.value: expected a number or a string for "gt"',
+			'rules[0].where.value: expected a number for "gt"',
 		],
 		[
 			{ where: node("views", "gte", {}) },
-			'rules[0].where.value: expected a number or a string for "gte"',
+			'rules[0].where.value: expected a number for "gte"',
 		],
 		[
 			{ where: node("views", "lt", true) },
-			'rules[0].where.value: expected a number or a string for "lt"',
+			'rules[0].where.value: expected a number for "lt"',
 		],
 		[
 			{ where: node("views", "lte", [10]) },
-			'rules[0].where.value: expected a number or a string for "lte"',
+			'rules[0].where.value: expected a number for "lte"',
+		],
+		[
+			{ where: node("title", "gt", "b") },
+			'rules[0].where.value: expected a number for "gt"',
 		],
 		[
 			{

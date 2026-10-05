@@ -9,7 +9,7 @@ What each comparison answers, including on data that does not fit. How to write 
 | `eq` | the values are equal | a `Date` compares by timestamp, also against an epoch-ms number; `1` equals `1n`; strings are case-sensitive |
 | `ne` | not `eq` | a `null` field is not equal to any other value |
 | `in` / `nin` | the value is / is not in the list | membership uses `eq`; the list may hold `null` |
-| `gt` `gte` `lt` `lte` | ordered comparison | both sides numeric (number, bigint, `Date`) or both strings |
+| `gt` `gte` `lt` `lte` | ordered comparison | both sides numeric (number, bigint, `Date`); strings are compared by equality only |
 | `contains` | the string contains the substring | case-sensitive |
 | `exists` | present for `true`, empty for `false` | `0`, `false` and `""` are present, `null` is empty |
 | `has` | the array holds the element | |
@@ -24,6 +24,7 @@ What each comparison answers, including on data that does not fit. How to write 
 | the field is `null` — under anything but `ne`, `nin`, `exists` | **no** |
 | a value of another type: `"5"` against `5`, `"true"` against `true` | **unknown** |
 | `NaN`, an invalid `Date` | **unknown** |
+| `gt` `gte` `lt` `lte` on two strings | **unknown** |
 | an object or an array compared by value | **unknown** |
 | an array element or a list member of another type, when no other one matches | **unknown** |
 | `has` / `hasAny` / `hasAll` on a value that is not an array | **unknown** |
@@ -56,6 +57,7 @@ ability.can("read", "post", { id: "p1" }); // false — status is missing, the d
 ## Why it works this way
 
 - **No coercion.** Postgres compares `'200'` with `200` as numbers, JavaScript compares `"10" < "9"` as strings. Here a wrong-typed value is unknown, never a silent match.
+- **Strings are not ordered.** JavaScript orders them by code unit, Postgres by the database collation, and Drizzle returns `numeric`, `date` and `timestamp` columns as strings by default, where `"10000.00" <= "9000.00"` holds. An ordering on two strings is unknown, so a limit kept in such a column refuses rather than lets the row through.
 - **A missing field is unknown, not no.** A row selected without the column, or from a serializer that drops keys, says nothing about the value. Reading it as "no" would let a `deny` on that field step aside and an `allow` with `ne` grant. Load the fields your rules read.
 - **`null` is a value.** The database stores it, and `can()` answers it as SQL answers a `NULL` column, so the query and the check agree.
 - **`nin` on a broken list is unknown, not yes.** A plain "no" for `in` would make its negation grant.

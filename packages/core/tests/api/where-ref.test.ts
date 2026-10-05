@@ -30,7 +30,8 @@ describe("a field compared with another field of the same row", () => {
 			["lte", 5n, 6, "yes"],
 			["lte", new Date(1000), new Date(2000), "yes"],
 			["eq", new Date(1000), 1000, "yes"],
-			["lte", "a", "b", "yes"],
+			["lte", "a", "b", "unknown"],
+			["eq", "a", "a", "yes"],
 		];
 
 	it.each(

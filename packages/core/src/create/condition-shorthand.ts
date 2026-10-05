@@ -7,16 +7,30 @@ import {
 } from "../model/index.js";
 import { isPlainObject, only, own } from "../shared/index.js";
 
-const normalizeConditionValue = (value: unknown): unknown => {
-	if (value instanceof Date) {
-		return value.getTime();
+const finiteValueOf = (
+	value: unknown,
+	scope: string,
+	field: string,
+): unknown => {
+	const plain = value instanceof Date ? value.getTime() : value;
+
+	if (typeof plain === "number" && !Number.isFinite(plain)) {
+		throw new TypeError(
+			`veto: ${scope}.${field} is ${plain} — JSON would carry it as null and the rule would change once stored. Pass a finite number or a valid Date.`,
+		);
 	}
 
-	if (Array.isArray(value)) {
-		return value.map((item) => (item instanceof Date ? item.getTime() : item));
-	}
+	return plain;
+};
 
-	return value;
+const normalizeConditionValue = (
+	value: unknown,
+	scope: string,
+	field: string,
+): unknown => {
+	return Array.isArray(value)
+		? value.map((item) => finiteValueOf(item, scope, field))
+		: finiteValueOf(value, scope, field);
 };
 
 const asOperator = (
@@ -40,7 +54,10 @@ const asOperator = (
 		refuseUndefined(`${scope}.${field}`, operator);
 	}
 
-	return { op: operator, value: normalizeConditionValue(value) };
+	return {
+		op: operator,
+		value: normalizeConditionValue(value, scope, field),
+	};
 };
 
 const refOf = (value: unknown): string | undefined => {
@@ -55,11 +72,11 @@ const refOf = (value: unknown): string | undefined => {
 
 type ValueNode = { field: string; op: ConditionOperator; value: unknown };
 
-const equalNode = (field: string, raw: unknown): ValueNode => {
+const equalNode = (field: string, raw: unknown, scope: string): ValueNode => {
 	return {
 		field,
 		op: ConditionOperator.Equal,
-		value: normalizeConditionValue(raw),
+		value: normalizeConditionValue(raw, scope, field),
 	};
 };
 
@@ -70,7 +87,9 @@ export const fieldNode = (
 ): ValueNode => {
 	const operator = asOperator(raw, scope, field);
 
-	return operator === null ? equalNode(field, raw) : { field, ...operator };
+	return operator === null
+		? equalNode(field, raw, scope)
+		: { field, ...operator };
 };
 
 export const comparisonNode = (
@@ -80,7 +99,7 @@ export const comparisonNode = (
 	const operator = asOperator(raw, "where", field);
 
 	if (operator === null) {
-		return equalNode(field, raw);
+		return equalNode(field, raw, "where");
 	}
 
 	if (isRefOperator(operator.op)) {

@@ -18,7 +18,6 @@ import {
 	inArray,
 	isNotNull,
 	isNull,
-	like,
 	lt,
 	lte,
 	ne,
@@ -42,10 +41,25 @@ const totalize = (predicate: SQL): SQL => sql`coalesce(${predicate}, false)`;
 
 const UNKNOWN = sql`null::boolean`;
 
-const NAN_CAPABLE = /^(numeric|decimal|real|double precision|float)/;
+const NAN_CAPABLE: readonly string[] = [
+	"numeric",
+	"decimal",
+	"real",
+	"double precision",
+	"float",
+];
+
+const typeStartsWith = (
+	column: Column,
+	prefixes: readonly string[],
+): boolean => {
+	const type = column.getSQLType();
+
+	return prefixes.some((prefix) => type.startsWith(prefix));
+};
 
 const holdsNaN = (column: Column): boolean =>
-	NAN_CAPABLE.test(column.getSQLType());
+	typeStartsWith(column, NAN_CAPABLE);
 
 const unknownOnNaN = (column: Column, predicate: SQL): SQL =>
 	holdsNaN(column)
@@ -59,8 +73,6 @@ const unusable = (value: unknown): boolean => {
 
 	return value instanceof Date && Number.isNaN(value.getTime());
 };
-
-const escapeLike = (value: string): string => value.replace(/[\\%_]/g, "\\$&");
 
 const columnValue = (column: Column, value: unknown): unknown => {
 	return column.dataType === "date" && typeof value === "number"
@@ -85,7 +97,6 @@ const ORDERING: readonly ConditionOperator[] = [
 ];
 
 const ORDERABLE_TYPES: readonly string[] = [
-	"string",
 	"number",
 	"bigint",
 	"date",
@@ -93,6 +104,53 @@ const ORDERABLE_TYPES: readonly string[] = [
 ];
 
 const TEXTUAL_TYPES: readonly string[] = ["string", "custom"];
+
+const SCALAR_COLUMNS: readonly string[] = [...SCALAR_TYPES, "date"];
+
+const INTEGER_BITS: Record<string, number> = {
+	smallint: 16,
+	smallserial: 16,
+	integer: 32,
+	serial: 32,
+	bigint: 64,
+	bigserial: 64,
+};
+
+const PARSED_FROM_TEXT: readonly string[] = [
+	"numeric",
+	"decimal",
+	"timestamp",
+	"date",
+	"time",
+	"interval",
+];
+
+const postgresTakes = (column: Column, value: unknown): boolean => {
+	if (typeof value === "string") {
+		return (
+			column.dataType !== "string" || !typeStartsWith(column, PARSED_FROM_TEXT)
+		);
+	}
+
+	const bits = own(INTEGER_BITS, column.getSQLType());
+
+	if (
+		bits === undefined ||
+		(typeof value !== "number" && typeof value !== "bigint")
+	) {
+		return true;
+	}
+
+	if (typeof value === "number" && !Number.isInteger(value)) {
+		return false;
+	}
+
+	const exact = BigInt(value);
+
+	return (
+		String(value) === String(exact) && BigInt.asIntN(bits, exact) === exact
+	);
+};
 
 const isScalar = (value: unknown): boolean => {
 	return (
@@ -113,33 +171,15 @@ const typeMatches = (column: Column, value: unknown): boolean => {
 			return typeof value === "boolean";
 		case "date":
 			return value instanceof Date;
+		case "array":
+			return false;
 		default:
 			return true;
 	}
 };
 
-const answersUnknown = (
-	column: Column,
-	op: ConditionOperator,
-	scalar: unknown,
-): boolean => {
-	if (unusable(scalar)) {
-		return ORDERING.includes(op);
-	}
-
-	if (ORDERING.includes(op)) {
-		return (
-			!ORDERABLE_TYPES.includes(column.dataType) || !typeMatches(column, scalar)
-		);
-	}
-
-	if (op === ConditionOperator.Contains) {
-		return (
-			typeof scalar === "string" && !TEXTUAL_TYPES.includes(column.dataType)
-		);
-	}
-
-	return false;
+const fits = (column: Column, scalar: unknown): boolean => {
+	return !unusable(scalar) && typeMatches(column, scalar);
 };
 
 const scalarOrThrow = (
@@ -150,6 +190,12 @@ const scalarOrThrow = (
 	if (!isScalar(value)) {
 		throw new Error(
 			`veto: operator "${op}" on column "${column.name}" got a non-scalar value — objects have no SQL comparison; fix the rule's value.`,
+		);
+	}
+
+	if (!postgresTakes(column, value)) {
+		throw new Error(
+			`veto: operator "${op}" on column "${column.name}" got ${String(value)}, which Postgres would reject or read as ${column.getSQLType()} rather than compare as can() does — fix the rule's value.`,
 		);
 	}
 
@@ -175,6 +221,10 @@ const arrayMembership = (
 	raw: unknown,
 	op: ConditionOperator,
 ): SQL => {
+	if (SCALAR_COLUMNS.includes(column.dataType)) {
+		return unknownWhenPresent(column);
+	}
+
 	const members = membersOrThrow(
 		column,
 		op === ConditionOperator.Has ? [raw] : raw,
@@ -206,24 +256,24 @@ const membership = (
 	op: ConditionOperator,
 ): SQL => {
 	const members = membersOrThrow(column, raw, op);
-
 	const present = members.filter(
-		(member) =>
-			member !== null && typeMatches(column, member) && !unusable(member),
+		(member) => member !== null && fits(column, member),
 	);
 
-	const hasNull = members.some((member) => member === null);
-	const parts: SQL[] = [];
+	const parts =
+		present.length === 0
+			? []
+			: [unknownOnNaN(column, totalize(inArray(column, present)))];
 
-	if (present.length > 0) {
-		parts.push(totalize(inArray(column, present)));
-	}
-
-	if (hasNull) {
+	if (members.includes(null)) {
 		parts.push(isNull(column));
 	}
 
-	return parts.length === 0 ? FALSE : (or(...parts) ?? FALSE);
+	if (members.some((member) => member !== null && !fits(column, member))) {
+		parts.push(unknownWhenPresent(column));
+	}
+
+	return or(...parts) ?? FALSE;
 };
 
 const nullSafeEqual = (column: Column, scalar: unknown): SQL => {
@@ -236,22 +286,13 @@ const nullSafeEqual = (column: Column, scalar: unknown): SQL => {
 		: sql`${column} is not distinct from ${sql.param(scalar, column)}`;
 };
 
-const nullSafeNotEqual = (column: Column, scalar: unknown): SQL => {
-	if (scalar === null) {
-		return isNotNull(column);
-	}
-
-	return column.notNull
-		? ne(column, scalar)
-		: sql`${column} is distinct from ${sql.param(scalar, column)}`;
-};
-
 type ScalarComparison = (column: Column, scalar: unknown) => SQL;
 
 const SCALAR_COMPARISONS: Record<
 	Exclude<
 		ConditionOperator,
 		| typeof ConditionOperator.Exists
+		| typeof ConditionOperator.NotEqual
 		| typeof ConditionOperator.In
 		| typeof ConditionOperator.NotIn
 		| typeof ConditionOperator.Has
@@ -261,7 +302,6 @@ const SCALAR_COMPARISONS: Record<
 	ScalarComparison
 > = {
 	[ConditionOperator.Equal]: nullSafeEqual,
-	[ConditionOperator.NotEqual]: nullSafeNotEqual,
 	[ConditionOperator.GreaterThan]: (column, scalar) =>
 		totalize(gt(column, scalar)),
 	[ConditionOperator.GreaterThanOrEqual]: (column, scalar) =>
@@ -272,7 +312,7 @@ const SCALAR_COMPARISONS: Record<
 		totalize(lte(column, scalar)),
 	[ConditionOperator.Contains]: (column, scalar) =>
 		typeof scalar === "string"
-			? totalize(like(column, `%${escapeLike(scalar)}%`))
+			? totalize(sql`strpos(${column}, ${sql.param(scalar, column)}) > 0`)
 			: FALSE,
 };
 
@@ -297,6 +337,10 @@ const compileField = (
 		return not(membership(column, value, op));
 	}
 
+	if (op === ConditionOperator.NotEqual) {
+		return not(compileField(column, ConditionOperator.Equal, value));
+	}
+
 	if (
 		op === ConditionOperator.Has ||
 		op === ConditionOperator.HasAny ||
@@ -319,17 +363,23 @@ const compileField = (
 		return compare(column, scalar);
 	}
 
-	if (answersUnknown(column, op, scalar)) {
+	if (op === ConditionOperator.Contains) {
+		return typeof scalar === "string" &&
+			!TEXTUAL_TYPES.includes(column.dataType)
+			? unknownWhenPresent(column)
+			: compare(column, scalar);
+	}
+
+	if (
+		!fits(column, scalar) ||
+		(ORDERING.includes(op) &&
+			(typeof scalar === "string" ||
+				!ORDERABLE_TYPES.includes(column.dataType)))
+	) {
 		return unknownWhenPresent(column);
 	}
 
-	if (unusable(scalar) || !typeMatches(column, scalar)) {
-		return op === ConditionOperator.NotEqual ? TRUE : FALSE;
-	}
-
-	const predicate = compare(column, scalar);
-
-	return ORDERING.includes(op) ? unknownOnNaN(column, predicate) : predicate;
+	return unknownOnNaN(column, compare(column, scalar));
 };
 
 type ColumnComparison = (left: Column, right: Column) => SQL;
@@ -354,6 +404,16 @@ const compileRef = (
 		throw new Error(
 			`veto: operator "${op}" cannot compare column "${left.name}" with column "${right.name}" — parseRules refuses such rules; fix the hand-built one.`,
 		);
+	}
+
+	if (
+		ORDERING.includes(op) &&
+		!(
+			ORDERABLE_TYPES.includes(left.dataType) &&
+			ORDERABLE_TYPES.includes(right.dataType)
+		)
+	) {
+		return UNKNOWN;
 	}
 
 	const nan = [left, right]

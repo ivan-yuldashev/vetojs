@@ -2,6 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { buildAbility, defineAbilities, parseRules, shape } from "@vetojs/core";
 import { sql } from "drizzle-orm";
 import {
+	bigint,
 	date,
 	integer,
 	numeric,
@@ -22,6 +23,7 @@ type Item = {
 	at: Date | null;
 	stamp: string | null;
 	day: string | null;
+	big: bigint | null;
 };
 
 const ac = defineAbilities({
@@ -32,11 +34,12 @@ const items = pgTable("items", {
 	id: text("id").primaryKey(),
 	title: text("title"),
 	count: integer("count"),
-	amount: numeric("amount"),
+	amount: numeric("amount", { precision: 12, scale: 2 }),
 	tags: text("tags").array(),
 	at: timestamp("at", { mode: "date" }),
 	stamp: timestamp("stamp", { mode: "string" }),
 	day: date("day"),
+	big: bigint("big", { mode: "bigint" }),
 });
 
 const client = new PGlite();
@@ -48,18 +51,19 @@ beforeAll(async () => {
 			id text primary key,
 			title text,
 			count integer,
-			amount numeric,
+			amount numeric(12, 2),
 			tags text[],
 			at timestamp,
 			stamp timestamp,
-			day date
+			day date,
+			big bigint
 		)
 	`);
 	await db.execute(sql`
 		insert into items values
-			('a', 'hello', 1, 1.5, '{x}', '2026-01-01', '2026-01-01', '2026-01-01'),
-			('b', 'world', 2, 2.5, '{y}', '2026-06-01', '2026-06-01', '2026-06-01'),
-			('c', null, null, null, null, null, null, null)
+			('a', 'hello', 1, 1.5, '{x}', '2026-01-01', '2026-01-01', '2026-01-01', 4611686018427387904),
+			('b', 'world', 2, 2.5, '{y}', '2026-06-01', '2026-06-01', '2026-06-01', 1),
+			('c', null, null, null, null, null, null, null, null)
 	`);
 });
 
@@ -158,20 +162,20 @@ describe("a rule parseRules accepts, on a column it does not fit", () => {
 			{ field: "count", op: "gt", value: 3000000000 },
 		],
 		[
+			"gt with a fraction on an integer column",
+			{ field: "count", op: "gt", value: 1.5 },
+		],
+		[
+			"eq with a number past the safe integers on a bigint column",
+			{ field: "big", op: "eq", value: 2 ** 62 },
+		],
+		[
 			"eq with a word on a numeric column",
 			{ field: "amount", op: "eq", value: "abc" },
 		],
 		[
-			"gt with a word on a numeric column",
-			{ field: "amount", op: "gt", value: "abc" },
-		],
-		[
 			"eq with a word on a timestamp read as a string",
 			{ field: "stamp", op: "eq", value: "x" },
-		],
-		[
-			"gt with a word on a timestamp read as a string",
-			{ field: "stamp", op: "gt", value: "x" },
 		],
 		[
 			"eq with a word on a date read as a string",

@@ -29,7 +29,7 @@ The other direction needs no API: `JSON.stringify(ability.rules)`.
 
 - an array of rule objects, `effect` exactly `"allow"` or `"deny"`;
 - `action` a non-empty name or list of names, `resource` a non-empty name;
-- conditions are well-formed: known operators, each with a value it can compare — an array for `in`, `nin`, `hasAny`, `hasAll`, a boolean for `exists`, a string for `contains`, a number or a string for `gt`, `gte`, `lt`, `lte`; `ref` only in `where` and only under `eq ne gt gte lt lte`; groups that name at least one condition; relations with a valid shape; exactly one shape per node;
+- conditions are well-formed: known operators, each with a value it can compare — an array for `in`, `nin`, `hasAny`, `hasAll`, a boolean for `exists`, a string for `contains`, a number for `gt`, `gte`, `lt`, `lte`; `ref` only in `where` and only under `eq ne gt gte lt lte`; groups that name at least one condition; relations with a valid shape; exactly one shape per node;
 - every number finite: `NaN`, `Infinity` and `-Infinity` are refused, since JSON would carry them as `null`;
 - `fields` a non-empty list of non-empty names, `values` flat, `when` without relations;
 - no `payload` key — rules written for an older build carried one.

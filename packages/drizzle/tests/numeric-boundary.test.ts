@@ -71,6 +71,20 @@ describe("numeric boundary: bigint column, number rule value at 2^53", () => {
 		]);
 	});
 
+	it("refuses a bigint past the column's range, which Postgres would reject, and keeps the last one inside", async () => {
+		const past = { field: "score", op: "eq", value: 2n ** 63n } as const;
+
+		expect(() => toDrizzle(past, recs)).toThrow(/score/);
+		await identity([
+			{
+				effect: "allow",
+				action: "read",
+				resource: "rec",
+				where: { field: "score", op: "eq", value: 2n ** 63n - 1n },
+			},
+		]);
+	});
+
 	it("deny eq at 2^53 (fail-open direction)", async () => {
 		await identity([
 			{ effect: "allow", action: "read", resource: "rec" },

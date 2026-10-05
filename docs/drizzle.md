@@ -67,11 +67,11 @@ For one table without a map, `toDrizzle(ability.where("read", "post"), posts)` c
 | Rule | SQL |
 |---|---|
 | `eq` / `ne` | `IS [NOT] NULL` for a null value, `=` / `<>` on a `NOT NULL` column, `IS [NOT] DISTINCT FROM` otherwise |
-| `gt gte lt lte`, `contains` | wrapped in `COALESCE(…, FALSE)`; `contains` escapes `%` and `_` |
+| `gt gte lt lte`, `contains` | wrapped in `COALESCE(…, FALSE)`; an ordering on a string is unknown; `contains` is `strpos(…) > 0`, so `%` and `_` are plain characters |
 | `in` / `nin` | `COALESCE(col IN (…), FALSE)` and its negation; an empty list is `FALSE` |
 | `exists` | `IS [NOT] NULL` |
 | `has hasAny hasAll` | `@>` / `&&` on the array column, `FALSE` for a `NULL` column |
-| `ref` | a comparison of the two columns; `NULL` or `NaN` on either side is unknown, as in the engine |
+| `ref` | a comparison of the two columns; `NULL` or `NaN` on either side, or an ordering of two text columns, is unknown, as in the engine |
 
 A value whose type does not match the column is answered as the engine answers it, unknown, rather than coerced by Postgres. A rule from JSON that does not fit its column — `has` on a text column, a word for a numeric one — is refused while the query is built or answered the same way; it never reaches Postgres as an error. A rule with no honest translation — an unknown operator or quantifier, a missing column, a relation without the map — throws while the query is built, so no SQL runs.
 
@@ -79,7 +79,7 @@ A value whose type does not match the column is answered as the engine answers i
 
 - **Verified, not asserted.** Conformance tests run `can()` and a real `SELECT` against Postgres (PGlite) over rows with `NULL` in every column and require identical id sets. `can()` reads the rows as the driver returns them.
 - **Values bind through the column's encoder**, as Drizzle's own operators do, so `bigint`, timestamps and `customType` columns serialise the same way.
-- **Postgres only** for now, and string ordering follows the database collation, not JavaScript: a `gt` or `lt` on a string — possible only in a rule from JSON — can select differently from `can()`.
+- **Postgres only** for now.
 
 ## Source
 

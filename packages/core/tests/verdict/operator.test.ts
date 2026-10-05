@@ -181,9 +181,10 @@ describe("evaluateOperator", () => {
 	});
 
 	describe("string comparison", () => {
-		it("compares lexicographically", () => {
-			expect(evaluateOperator("gt", "b", "a")).toBe(true);
-			expect(evaluateOperator("lt", "a", "b")).toBe(true);
+		it("does not order strings, which are compared by equality only", () => {
+			expect(evaluateOperator("gt", "b", "a")).toBeUndefined();
+			expect(evaluateOperator("lt", "a", "b")).toBeUndefined();
+			expect(evaluateOperator("lte", "10000.00", "9000.00")).toBeUndefined();
 		});
 	});
 

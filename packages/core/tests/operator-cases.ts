@@ -367,13 +367,14 @@ export const OPERATOR_SUITES: OperatorSuite[] = [
 		],
 	},
 	{
-		title: "gt on a string",
+		title: "gt on a string, which is compared by equality only",
 		condition: node("title", "gt", "b"),
 		field: "title",
 		cases: [
-			["a later string", "c", "yes"],
-			["the same string", "b", "no"],
-			["an earlier string", "a", "no"],
+			["a later string", "c", "unknown"],
+			["the same string", "b", "unknown"],
+			["an earlier string", "a", "unknown"],
+			["null", null, "no"],
 			["a number", 5, "unknown"],
 			["an absent field", ABSENT, "unknown"],
 		],
