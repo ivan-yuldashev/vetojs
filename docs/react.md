@@ -8,7 +8,7 @@ The rules that guard your server decide what the interface shows. They reach the
 npm install @vetojs/react @vetojs/core
 ```
 
-React 18 or newer; `@vetojs/core` is a peer dependency.
+React 18 or 19; `@vetojs/core` is a peer dependency.
 
 ## Create the bindings once
 
