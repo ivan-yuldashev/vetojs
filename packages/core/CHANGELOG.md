@@ -1,5 +1,36 @@
 # @vetojs/core
 
+## 1.1.0
+
+### Minor Changes
+
+- bf83701: **`markLoaded` fills in the relations a serializer dropped.** Sources that leave empty values out — `jsonb_strip_nulls`, Go's `omitempty`, Jackson's `NON_NULL`, protobuf JSON — return a loaded but empty relation with no key, and a check that reads it throws as if it had never been loaded. Name the relations you loaded, written as the row would look with each of them empty:
+  
+  ```ts
+  const ready = markLoaded(post, { author: null, comments: [{ author: null }] });
+  ```
+  
+  A missing to-one becomes `null` and a missing list `[]`. Values that are there are kept, and a relation you do not name stays unloaded. The shape is checked against the row's type; `LoadedRelations<T>` names it.
+  
+  A relation that is `undefined` reads as not loaded on every row, including one `markLoaded` returned.
+- 6f42a6d: **Data that does not fit a condition answers unknown under every operator.** An `allow` grants nothing on it and a `deny` fires:
+  
+  - a field missing from the row, or `undefined`, `exists` included — load the fields your rules read;
+  - a value of another type (`"5"` against `5`, `"true"` against `true`), `NaN` or an invalid `Date`, under `eq`, `ne`, `in` and `nin` as under `gt` and the rest;
+  - an array element or a list member of another type, when no other one matches.
+  
+  `null` is a value: `eq null` holds only for `null`, and a `null` field is a plain no against anything else.
+  
+  `gt`, `gte`, `lt` and `lte` compare numbers, `bigint` and dates. On two strings they answer unknown, in `ref` too, and `parseRules` refuses a string for them, as the types of `createRules` already did. Drizzle returns `numeric`, `date` and `timestamp` columns as strings by default; to order them, read them in `mode: "number"` or `mode: "date"`.
+  
+  `createRules` throws, and `parseRules` refuses, on `NaN`, ±`Infinity` and an invalid `Date` in `where`, `values` and `when`.
+  
+  `toDrizzle` and `filter` answer the same way as `can()`. A rule that does not fit its column — `has` on a scalar column, a string on an array column — selects what `can()` allows. A value Postgres would reject or read by its own rules — a word for a `numeric`, `date` or `timestamp` column read as a string, a number or a `bigint` past an integer column's range, a number past `Number.MAX_SAFE_INTEGER` that would reach Postgres rounded — throws while the query is built.
+
+### Patch Changes
+
+- 9fd0054: **An ability bound with `withEnv` takes the same memory however many environments it is bound to.** Binding per request is also slightly faster. The answers are the same.
+
 ## 1.0.0
 
 ### Major Changes
