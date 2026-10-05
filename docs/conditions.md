@@ -67,7 +67,7 @@ A `Date` is stored as epoch milliseconds so the rule stays JSON, and a `Date` fr
 
 ## Yes, no or unknown
 
-A condition answers yes, no, or **unknown** when the data does not fit it — a wrong-typed field, a corrupt relation. `and` is no if any part is no, `or` is yes if any part is yes; otherwise an unknown part makes the whole unknown. `not` leaves unknown as it is, so wrapping a `deny` in `not` does not let bad data through. What a decision does with unknown is on [rule evaluation](./rule-evaluation.md#when-the-data-doesnt-fit).
+A condition answers yes, no, or **unknown** when the data does not fit it — a wrong-typed field, a field the row lacks, a corrupt relation. `and` is no if any part is no, `or` is yes if any part is yes; otherwise an unknown part makes the whole unknown. `not` leaves unknown as it is, so wrapping a `deny` in `not` does not let bad data through. What a decision does with unknown is on [rule evaluation](./rule-evaluation.md#when-the-data-doesnt-fit).
 
 ## Where each form is allowed
 

@@ -31,7 +31,7 @@ The order of rules in the array does not matter.
 
 ## When the data doesn't fit
 
-A condition can answer **unknown** — a wrong-typed field, a corrupt relation ([operators](./operators.md)):
+A condition can answer **unknown** — a wrong-typed field, a field the row lacks, a corrupt relation ([operators](./operators.md)):
 
 | The condition answers | an `allow` | a `deny` |
 |---|---|---|

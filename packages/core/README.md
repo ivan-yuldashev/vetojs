@@ -176,7 +176,7 @@ The wrapped function keeps its original signature: `(id: string) => Promise<…>
 
 ## Bad data and missing relations
 
-A wrong-typed field, `NaN` or an object compared by value answers **unknown**: an `allow` grants nothing, a `deny` fires ([operators](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.md)).
+A wrong-typed field, a field the row lacks, `NaN` or an object compared by value answers **unknown**: an `allow` grants nothing, a `deny` fires ([operators](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.md)).
 
 A rule that reads `post.author.role` needs the author loaded. Without it `can()` throws `RelationNotLoadedError` instead of answering "doesn't match":
 

@@ -176,7 +176,7 @@ const publishPost = withPermission(
 
 ## Кривые данные и незагруженные связи
 
-Поле не того типа, `NaN` или объект, сравниваемый по значению, дают **«неизвестно»**: `allow` ничего не разрешает, `deny` срабатывает ([операторы](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.ru.md)).
+Поле не того типа, поле, которого в строке нет, `NaN` или объект, сравниваемый по значению, дают **«неизвестно»**: `allow` ничего не разрешает, `deny` срабатывает ([операторы](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.ru.md)).
 
 Правилу, которое читает `post.author.role`, нужен загруженный автор. Без него `can()` бросает `RelationNotLoadedError`, а не отвечает «не совпало»:
 
