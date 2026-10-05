@@ -60,7 +60,7 @@ npm install @vetojs/core
 pnpm add @vetojs/core
 ```
 
-ESM only, Node.js 20 or newer.
+ESM only, Node.js 22 or newer.
 
 ### 2. Declare your resources and your policy
 

@@ -32,7 +32,7 @@ npm install @vetojs/react @vetojs/core
 pnpm add @vetojs/react @vetojs/core
 ```
 
-Только ESM, Node.js 20 и новее, React 18 или 19.
+Только ESM, Node.js 22 и новее, React 18 или 19.
 
 ### 2. Соберите привязки один раз
 

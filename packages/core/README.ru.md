@@ -32,7 +32,7 @@ npm install @vetojs/core
 pnpm add @vetojs/core
 ```
 
-Только ESM, Node.js 20 и новее.
+Только ESM, Node.js 22 и новее.
 
 ### 2. Объявите ресурсы и политику
 
