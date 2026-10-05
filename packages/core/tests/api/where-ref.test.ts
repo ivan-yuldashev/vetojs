@@ -70,9 +70,18 @@ describe("a field compared with another field of the same row", () => {
 		expect(
 			answerOf(ref("spent", "eq", "limit"), { id: "p1", spent: {}, limit: {} }),
 		).toBe("unknown");
-		expect(
-			answerOf(ref("spent", "eq", "limit"), { id: "p1", spent: 5, limit: "5" }),
-		).toBe("no");
+		for (const op of ["eq", "ne"]) {
+			expect(
+				answerOf(ref("spent", op, "limit"), { id: "p1", spent: 5, limit: "5" }),
+			).toBe("unknown");
+			expect(
+				answerOf(ref("spent", op, "limit"), {
+					id: "p1",
+					spent: true,
+					limit: "true",
+				}),
+			).toBe("unknown");
+		}
 	});
 
 	it("reads only the row's own fields", () => {

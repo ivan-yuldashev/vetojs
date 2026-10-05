@@ -2,6 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import {
 	buildAbility,
 	type CheckedRules,
+	createRules,
 	defineAbilities,
 	type Rule,
 	shape,
@@ -174,7 +175,7 @@ afterAll(async () => {
 
 const identical = async (rules: Rule[]): Promise<string[]> => {
 	const ability = buildAbility(ac, rules as CheckedRules);
-	const engine = rows
+	const engine = (await db.select().from(budgets))
 		.filter((row) => ability.can("read", "budget", row))
 		.map((row) => row.id)
 		.sort();
@@ -251,5 +252,47 @@ describe("a column compared with another column", () => {
 		expect(() =>
 			toDrizzle({ field: "spent", op: "lte", ref: "budget" } as never, budgets),
 		).toThrow('column "budget" does not exist');
+	});
+});
+
+describe("a numeric column in the mode Drizzle reads it by default", () => {
+	type Invoice = { id: string; spent: number; limit: number };
+
+	const invoiceAc = defineAbilities({
+		resources: { invoice: { schema: shape<Invoice>(), actions: ["update"] } },
+	});
+	const invoices = pgTable("invoices", {
+		id: text("id").primaryKey(),
+		spent: numeric("spent", { precision: 12, scale: 2 }),
+		limit: numeric("limit", { precision: 12, scale: 2 }),
+	});
+
+	beforeAll(async () => {
+		await db.execute(sql`
+			create table invoices (id text primary key, spent numeric(12, 2), "limit" numeric(12, 2))
+		`);
+		await db.execute(sql`
+			insert into invoices values ('over', 10000, 9000), ('under', 999, 1000)
+		`);
+	});
+
+	it("selects the rows can() allows on the rows Drizzle loads, and never the one over its limit", async () => {
+		const { allow } = createRules(invoiceAc);
+		const ability = buildAbility(invoiceAc, [
+			allow("update", "invoice", {
+				where: { spent: { lte: { ref: "limit" } } },
+			}),
+		]);
+		const engine = (await db.select().from(invoices))
+			.filter((row) => ability.can("update", "invoice", row as never))
+			.map((row) => row.id)
+			.sort();
+		const selected = await db
+			.select({ id: invoices.id })
+			.from(invoices)
+			.where(toDrizzle(ability.where("update", "invoice"), invoices));
+
+		expect(selected.map((row) => row.id).sort()).toEqual(engine);
+		expect(engine).not.toContain("over");
 	});
 });

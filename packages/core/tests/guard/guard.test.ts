@@ -398,6 +398,8 @@ describe("createGuard", () => {
 		const confused = [
 			{ id: "p1", authorId: "u1", status: ["draft"] },
 			{ id: "p1", authorId: "u1", status: { value: "draft" } },
+			{ id: "p1", authorId: "u1", status: 5 },
+			{ id: "p1", authorId: "u1", status: true },
 		];
 
 		for (const row of confused) {
@@ -412,6 +414,34 @@ describe("createGuard", () => {
 
 			await expect(underDeny()).rejects.toBeInstanceOf(ForbiddenError);
 			await expect(underAllow()).rejects.toBeInstanceOf(ForbiddenError);
+		}
+	});
+
+	it("denies a row loaded without the field a rule reads, on both polarities", async () => {
+		const denies = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => [
+				allow("read", "post"),
+				deny("read", "post", { where: { status: "draft" } }),
+			],
+		});
+		const allows = createGuard({
+			ac,
+			getActor: () => actor,
+			policy: () => [
+				allow("read", "post", { where: { status: { ne: "draft" } } }),
+			],
+		});
+		const partial = { id: "p1", authorId: "u1" } as Post;
+
+		for (const guard of [denies, allows]) {
+			const read = guard(
+				{ action: "read", resource: "post", load: () => partial },
+				async (ctx) => ctx.row.id,
+			);
+
+			await expect(read()).rejects.toBeInstanceOf(ForbiddenError);
 		}
 	});
 

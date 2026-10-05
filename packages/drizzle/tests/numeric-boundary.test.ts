@@ -12,7 +12,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { toDrizzle } from "../src/compile.js";
 
-type Row = { id: string; score: bigint };
+type Row = { id: string; score: bigint | null };
 const ac = defineAbilities({
 	resources: { rec: { schema: shape<Row>(), actions: ["read"] } },
 });
@@ -38,7 +38,7 @@ afterAll(async () => client.close());
 
 const identity = async (rules: Rule[]): Promise<void> => {
 	const ability = buildAbility(ac, rules as CheckedRules);
-	const engine = rows
+	const engine = (await db.select().from(recs))
 		.filter((r) => ability.can("read", "rec", r))
 		.map((r) => r.id)
 		.sort();

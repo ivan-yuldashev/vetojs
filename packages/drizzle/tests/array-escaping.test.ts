@@ -46,7 +46,7 @@ const identity = async (value: string) => {
 	const ability = buildAbility(ac, [
 		allow("read", "doc", { where: { labels: { has: value } } }),
 	]);
-	const engine = rows
+	const engine = (await db.select().from(docs))
 		.filter((r) => ability.can("read", "doc", r))
 		.map((r) => r.id)
 		.sort();

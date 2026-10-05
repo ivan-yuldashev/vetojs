@@ -16,8 +16,37 @@ describe("evaluateOperator", () => {
 		it("treats null and undefined as distinct", () => {
 			expect(evaluateOperator("eq", null, undefined)).toBe(false);
 		});
-		it("returns false for NaN compared to NaN (JS semantics)", () => {
-			expect(evaluateOperator("eq", Number.NaN, Number.NaN)).toBe(false);
+		it("reads null in a rule as a value: it equals null and nothing else", () => {
+			expect(evaluateOperator("eq", null, null)).toBe(true);
+			expect(evaluateOperator("eq", "draft", null)).toBe(false);
+			expect(evaluateOperator("eq", 0, null)).toBe(false);
+			expect(evaluateOperator("eq", "", null)).toBe(false);
+			expect(evaluateOperator("eq", false, null)).toBe(false);
+			expect(evaluateOperator("ne", null, null)).toBe(false);
+			expect(evaluateOperator("ne", "draft", null)).toBe(true);
+			expect(evaluateOperator("in", null, ["draft", null])).toBe(true);
+			expect(evaluateOperator("nin", null, ["draft", null])).toBe(false);
+		});
+		it("returns undefined for an absent value, whatever the rule names", () => {
+			expect(evaluateOperator("eq", undefined, "draft")).toBeUndefined();
+			expect(evaluateOperator("eq", undefined, null)).toBeUndefined();
+			expect(evaluateOperator("in", undefined, ["draft"])).toBeUndefined();
+			expect(evaluateOperator("in", undefined, [])).toBeUndefined();
+		});
+		it("returns undefined for NaN, which no value can be compared with", () => {
+			expect(evaluateOperator("eq", Number.NaN, Number.NaN)).toBeUndefined();
+			expect(evaluateOperator("eq", Number.NaN, 5)).toBeUndefined();
+			expect(evaluateOperator("eq", 5, Number.NaN)).toBeUndefined();
+		});
+		it("returns undefined when present operands have mismatched primitive types", () => {
+			expect(evaluateOperator("eq", "10", 10)).toBeUndefined();
+			expect(evaluateOperator("eq", 10, "10")).toBeUndefined();
+			expect(evaluateOperator("eq", "true", true)).toBeUndefined();
+			expect(evaluateOperator("eq", 1, true)).toBeUndefined();
+			expect(evaluateOperator("eq", "1", 1n)).toBeUndefined();
+			expect(
+				evaluateOperator("eq", "1970-01-01T00:00:00.000Z", new Date(0)),
+			).toBeUndefined();
 		});
 	});
 
@@ -26,8 +55,21 @@ describe("evaluateOperator", () => {
 			expect(evaluateOperator("ne", "draft", "published")).toBe(true);
 			expect(evaluateOperator("ne", "draft", "draft")).toBe(false);
 		});
-		it("returns true for NaN compared to NaN", () => {
-			expect(evaluateOperator("ne", Number.NaN, Number.NaN)).toBe(true);
+		it("returns undefined for NaN compared to NaN", () => {
+			expect(evaluateOperator("ne", Number.NaN, Number.NaN)).toBeUndefined();
+		});
+		it("returns undefined when present operands have mismatched primitive types, so a negation cannot grant", () => {
+			expect(evaluateOperator("ne", 5, "published")).toBeUndefined();
+			expect(evaluateOperator("ne", "true", true)).toBeUndefined();
+		});
+		it("returns true for null, which differs from every other value", () => {
+			expect(evaluateOperator("ne", null, "published")).toBe(true);
+		});
+		it("returns undefined for an absent value, so a negation cannot grant", () => {
+			expect(evaluateOperator("ne", undefined, "published")).toBeUndefined();
+			expect(evaluateOperator("ne", undefined, null)).toBeUndefined();
+			expect(evaluateOperator("nin", undefined, ["published"])).toBeUndefined();
+			expect(evaluateOperator("nin", undefined, [])).toBeUndefined();
 		});
 	});
 
@@ -56,6 +98,16 @@ describe("evaluateOperator", () => {
 		it("returns true when a later member matches despite an incomparable one", () => {
 			expect(evaluateOperator("in", "draft", [{}, "draft"])).toBe(true);
 		});
+		it("returns undefined when no member matches and one has another primitive type", () => {
+			expect(evaluateOperator("in", 5, ["draft", "published"])).toBeUndefined();
+			expect(evaluateOperator("in", "1", [1, 2])).toBeUndefined();
+			expect(evaluateOperator("in", "draft", ["published", 5])).toBeUndefined();
+		});
+		it("returns undefined for a NaN member or value", () => {
+			expect(evaluateOperator("in", Number.NaN, [1, 2])).toBeUndefined();
+			expect(evaluateOperator("in", 3, [Number.NaN, 1])).toBeUndefined();
+			expect(evaluateOperator("in", 1, [Number.NaN, 1])).toBe(true);
+		});
 	});
 
 	describe("nin", () => {
@@ -77,6 +129,12 @@ describe("evaluateOperator", () => {
 		});
 		it("returns true for an empty array", () => {
 			expect(evaluateOperator("nin", "draft", [])).toBe(true);
+		});
+		it("stays undefined when a value of another primitive type matches no member", () => {
+			expect(
+				evaluateOperator("nin", 5, ["draft", "published"]),
+			).toBeUndefined();
+			expect(evaluateOperator("nin", "1", [1])).toBeUndefined();
 		});
 	});
 
@@ -133,9 +191,13 @@ describe("evaluateOperator", () => {
 		it("returns undefined when present operands have mismatched types", () => {
 			expect(evaluateOperator("gt", 5, "a")).toBeUndefined();
 		});
-		it("returns false when an operand is absent", () => {
-			expect(evaluateOperator("gt", undefined, 5)).toBe(false);
+		it("returns false for a null value", () => {
+			expect(evaluateOperator("gt", null, 5)).toBe(false);
 			expect(evaluateOperator("lt", null, 5)).toBe(false);
+		});
+		it("returns undefined for an absent value", () => {
+			expect(evaluateOperator("gt", undefined, 5)).toBeUndefined();
+			expect(evaluateOperator("lte", undefined, 5)).toBeUndefined();
 		});
 		it("returns undefined for operands that are not orderable at all", () => {
 			expect(evaluateOperator("gt", true, false)).toBeUndefined();
@@ -165,9 +227,11 @@ describe("evaluateOperator", () => {
 			).toBeUndefined();
 			expect(evaluateOperator("contains", 42, "4")).toBeUndefined();
 		});
-		it("returns false when the actual value is absent", () => {
-			expect(evaluateOperator("contains", undefined, "x")).toBe(false);
+		it("returns false for a null value", () => {
 			expect(evaluateOperator("contains", null, "x")).toBe(false);
+		});
+		it("returns undefined for an absent value", () => {
+			expect(evaluateOperator("contains", undefined, "x")).toBeUndefined();
 		});
 		it("returns true when expected is an empty string", () => {
 			expect(evaluateOperator("contains", "hello", "")).toBe(true);
@@ -181,13 +245,14 @@ describe("evaluateOperator", () => {
 			expect(evaluateOperator("exists", 0, true)).toBe(true);
 			expect(evaluateOperator("exists", false, true)).toBe(true);
 		});
-		it("treats null and undefined as absent", () => {
+		it("treats null as empty", () => {
 			expect(evaluateOperator("exists", null, true)).toBe(false);
-			expect(evaluateOperator("exists", undefined, true)).toBe(false);
-		});
-		it("matches when absence is expected", () => {
-			expect(evaluateOperator("exists", undefined, false)).toBe(true);
+			expect(evaluateOperator("exists", null, false)).toBe(true);
 			expect(evaluateOperator("exists", "value", false)).toBe(false);
+		});
+		it("returns undefined for an absent value, which may be anything", () => {
+			expect(evaluateOperator("exists", undefined, true)).toBeUndefined();
+			expect(evaluateOperator("exists", undefined, false)).toBeUndefined();
 		});
 		it("answers unknown for anything that is not a boolean", () => {
 			for (const asked of ["yes", "false", "0", "", 0, 1, [], {}, null]) {
@@ -268,9 +333,8 @@ describe("evaluateOperator", () => {
 			expect(evaluateOperator("eq", "a", { a: 1 })).toBe(undefined);
 		});
 
-		it("still decides when a non-scalar meets an absent value", () => {
+		it("still decides when a non-scalar meets null", () => {
 			expect(evaluateOperator("eq", null, { a: 1 })).toBe(false);
-			expect(evaluateOperator("eq", undefined, { a: 1 })).toBe(false);
 		});
 
 		it("leaves Date on the scalar side of the line", () => {
@@ -328,11 +392,19 @@ describe("evaluateOperator", () => {
 			).toBeUndefined();
 		});
 
-		it("still equals decidably, where nothing is being ordered", () => {
-			expect(evaluateOperator("eq", new Date("not-a-date"), Number.NaN)).toBe(
-				false,
-			);
-			expect(evaluateOperator("eq", Number.NaN, Number.NaN)).toBe(false);
+		it("answers equality unknown too, as it answers an ordering", () => {
+			expect(
+				evaluateOperator("eq", new Date("not-a-date"), Number.NaN),
+			).toBeUndefined();
+			expect(
+				evaluateOperator("eq", new Date("not-a-date"), new Date(0)),
+			).toBeUndefined();
+			expect(evaluateOperator("eq", new Date("not-a-date"), 0)).toBeUndefined();
+			expect(evaluateOperator("ne", new Date("not-a-date"), 0)).toBeUndefined();
+			expect(evaluateOperator("eq", Number.NaN, Number.NaN)).toBeUndefined();
+		});
+
+		it("still counts a NaN as present", () => {
 			expect(evaluateOperator("exists", Number.NaN, true)).toBe(true);
 		});
 
@@ -361,10 +433,21 @@ describe("array membership", () => {
 		expect(evaluateOperator("hasAny", ["a"], [])).toBe(false);
 	});
 
-	it("an absent field is a decidable non-match", () => {
-		expect(evaluateOperator("has", undefined, "a")).toBe(false);
+	it("a null field is a decidable non-match", () => {
 		expect(evaluateOperator("has", null, "a")).toBe(false);
+		expect(evaluateOperator("hasAny", null, ["a"])).toBe(false);
 		expect(evaluateOperator("hasAll", null, [])).toBe(false);
+	});
+
+	it("an absent field is unknown, even for an empty list", () => {
+		expect(evaluateOperator("has", undefined, "a")).toBe(undefined);
+		expect(evaluateOperator("hasAny", undefined, [])).toBe(undefined);
+		expect(evaluateOperator("hasAll", undefined, [])).toBe(undefined);
+	});
+
+	it("an absent field is unknown to exists as well", () => {
+		expect(evaluateOperator("exists", undefined, true)).toBe(undefined);
+		expect(evaluateOperator("exists", undefined, false)).toBe(undefined);
 	});
 
 	it("a present non-array is unknown, so neither polarity can decide", () => {
@@ -374,6 +457,10 @@ describe("array membership", () => {
 
 	it("an element the engine cannot compare leaves the answer unknown", () => {
 		expect(evaluateOperator("has", [{ a: 1 }], { a: 1 })).toBe(undefined);
+		expect(evaluateOperator("has", [5], "a")).toBe(undefined);
+		expect(evaluateOperator("has", [Number.NaN], 1)).toBe(undefined);
+		expect(evaluateOperator("hasAny", ["1"], [1])).toBe(undefined);
+		expect(evaluateOperator("hasAll", ["a", 5], ["a", "b"])).toBe(undefined);
 	});
 
 	it("a list where a scalar is expected is unknown, not a silent hasAny", () => {

@@ -37,13 +37,6 @@ const txns = pgTable("txns", {
 	count: integer("count"),
 });
 
-const rows: Txn[] = [
-	{ id: "sound", amount: 5000, score: 5000, count: 5000 },
-	{ id: "small", amount: 10, score: 10, count: 10 },
-	{ id: "nan", amount: Number.NaN, score: Number.NaN, count: 7 },
-	{ id: "empty", amount: null, score: null, count: null },
-];
-
 const dialect = new PgDialect();
 const client = new PGlite();
 const db = drizzle(client);
@@ -72,7 +65,7 @@ afterAll(async () => {
 
 const identical = async (rules: Rule[]): Promise<string[]> => {
 	const ability = buildAbility(ac, rules as CheckedRules);
-	const engine = rows
+	const engine = (await db.select().from(txns))
 		.filter((row) => ability.can("read", "txn", row))
 		.map((row) => row.id)
 		.sort();
@@ -147,9 +140,26 @@ describe("a NaN the database can hold", () => {
 		]);
 	});
 
-	it("still decides equality, which neither side calls unknown", async () => {
-		await identical(permitted("amount", "eq", 5000));
-		await identical(vetoed("amount", "ne", 5000));
+	it("answers equality with it unknown, as it answers an ordering", async () => {
+		for (const field of ["amount", "score"]) {
+			expect(await identical(permitted(field, "eq", 5000))).toEqual(["sound"]);
+			expect(await identical(vetoed(field, "eq", 5000))).toEqual([
+				"empty",
+				"small",
+			]);
+			expect(await identical(permitted(field, "ne", 5000))).toEqual([
+				"empty",
+				"small",
+			]);
+			expect(await identical(vetoed(field, "ne", 5000))).toEqual(["sound"]);
+			expect(await identical(permitted(field, "in", [10, 5000]))).toEqual([
+				"small",
+				"sound",
+			]);
+			expect(await identical(vetoed(field, "in", [10, 5000]))).toEqual([
+				"empty",
+			]);
+		}
 	});
 
 	it("does not reach for a NaN test on a column that cannot hold one", async () => {
@@ -178,21 +188,30 @@ describe("a NaN carried by the rule itself", () => {
 		}
 	});
 
-	it("equals nothing, and differs from everything", async () => {
+	it("is equal to nothing and different from nothing, so it decides only the NULL row", async () => {
 		expect(await identical(permitted("amount", "eq", Number.NaN))).toEqual([]);
+		expect(await identical(vetoed("amount", "eq", Number.NaN))).toEqual([
+			"empty",
+		]);
 		expect(await identical(permitted("amount", "ne", Number.NaN))).toEqual([
 			"empty",
-			"nan",
-			"small",
-			"sound",
 		]);
+		expect(await identical(vetoed("amount", "ne", Number.NaN))).toEqual([]);
 	});
 
-	it("is not a member of any list", async () => {
-		await identical(permitted("amount", "in", [Number.NaN]));
-		await identical(permitted("amount", "in", [Number.NaN, 10]));
-		await identical(vetoed("amount", "in", [Number.NaN, 10]));
-		await identical(permitted("amount", "nin", [Number.NaN, 10]));
+	it("leaves a list unknown wherever no other member matches", async () => {
+		expect(await identical(permitted("amount", "in", [Number.NaN]))).toEqual(
+			[],
+		);
+		expect(
+			await identical(permitted("amount", "in", [Number.NaN, 10])),
+		).toEqual(["small"]);
+		expect(await identical(vetoed("amount", "in", [Number.NaN, 10]))).toEqual([
+			"empty",
+		]);
+		expect(
+			await identical(permitted("amount", "nin", [Number.NaN, 10])),
+		).toEqual(["empty"]);
 	});
 
 	it("carries an invalid date the same way", async () => {

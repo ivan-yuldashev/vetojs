@@ -237,6 +237,16 @@ describe("the field a value constraint stands on", () => {
 		expect(write(ability, { status: "draft" }).ok).toBe(true);
 	});
 
+	it("has nothing to decide about a field the write leaves out", () => {
+		const ability = buildAbility(ac, [
+			allow("update", "post"),
+			deny("update", "post", { values: FORBIDDEN }),
+		]);
+
+		expect(write(ability, { title: "t" }).ok).toBe(true);
+		expect(withoutRow(ability, { title: "t" }).ok).toBe(true);
+	});
+
 	it("is not reached when the field itself is not permitted", () => {
 		const ability = buildAbility(ac, [
 			allow("update", { post: ["title"] }),

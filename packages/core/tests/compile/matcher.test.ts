@@ -263,19 +263,19 @@ describe("compileMatcher", () => {
 			value: "u1",
 		};
 
-		it("handles undefined properties gracefully", () => {
+		it("answers unknown for a field the row does not carry", () => {
 			const partialPost = { status: "published" } as Post;
 			expect(
 				compileMatcher<Post>({ field: "views", op: "eq", value: 100 })(
 					partialPost,
 				),
-			).toBe(false);
+			).toBeUndefined();
 		});
 
 		it("reads own fields only, never the prototype chain", () => {
 			const inherited = Object.create({ authorId: "u1" }) as Post;
 
-			expect(compileMatcher(authorId)(inherited)).toBe(false);
+			expect(compileMatcher(authorId)(inherited)).toBeUndefined();
 		});
 
 		it("is not fooled by a row built without a prototype", () => {
@@ -290,7 +290,7 @@ describe("compileMatcher", () => {
 			for (const field of ["__proto__", "constructor", "prototype"]) {
 				const node = { field, op: "eq", value: "x" } as ConditionNode<Post>;
 
-				expect(compileMatcher(node)(createPost())).toBe(false);
+				expect(compileMatcher(node)(createPost())).toBeUndefined();
 				expect(
 					compileMatcher(node)(
 						Object.assign(Object.create(null), { [field]: "x" }) as Post,
@@ -301,14 +301,14 @@ describe("compileMatcher", () => {
 			expect(({} as Record<string, unknown>).polluted).toBeUndefined();
 		});
 
-		it("denies a symbol field instead of reading one", () => {
+		it("answers unknown for a symbol field instead of reading one", () => {
 			const node = {
 				field: Symbol("authorId"),
 				op: "eq",
 				value: "u1",
 			} as unknown as ConditionNode<Post>;
 
-			expect(compileMatcher(node)(createPost())).toBe(false);
+			expect(compileMatcher(node)(createPost())).toBeUndefined();
 		});
 
 		it("reads a numeric field as the string key an object actually has", () => {
@@ -319,7 +319,7 @@ describe("compileMatcher", () => {
 			expect(compileMatcher(node)({ 0: "first" } as unknown as Post)).toBe(
 				true,
 			);
-			expect(compileMatcher(node)(createPost())).toBe(false);
+			expect(compileMatcher(node)(createPost())).toBeUndefined();
 		});
 
 		it("leaves the row it read exactly as it found it", () => {
@@ -680,7 +680,7 @@ describe("a leaf of one's own", () => {
 		} as unknown as ConditionNode<Post>;
 
 		expect(compileMatcher(nested, () => () => true)({})).toBe(true);
-		expect(compileMatcher(nested)({})).toBe(false);
+		expect(compileMatcher(nested)({})).toBeUndefined();
 	});
 });
 

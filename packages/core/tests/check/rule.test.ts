@@ -447,13 +447,13 @@ describe("one rule, judged alone", () => {
 			expect(at(["draft"])).toBeUndefined();
 		});
 
-		it("judges an absent value as absent, not as a missing key", () => {
+		it("answers unknown for a value written as undefined, which is not a missing key", () => {
 			expect(
 				permits(
 					{ values: DRAFT },
 					{ field: "status", payload: { status: undefined } },
 				),
-			).toBe(false);
+			).toBeUndefined();
 		});
 
 		it("lets through a field it does not constrain, and a field asked without a payload", () => {
