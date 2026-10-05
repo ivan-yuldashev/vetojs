@@ -7,7 +7,7 @@
 	"license": "MIT",
 	"packageManager": "pnpm@10.20.0",
 	"engines": {
-		"node": ">=20"
+		"node": ">=22.11"
 	},
 	"scripts": {
 		"build": "pnpm --filter \"./packages/*\" --fail-if-no-match run build",

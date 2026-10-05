@@ -32,7 +32,7 @@ npm install @vetojs/react @vetojs/core
 pnpm add @vetojs/react @vetojs/core
 ```
 
-ESM only, Node.js 20 or newer, React 18 or 19.
+ESM only, Node.js 22 or newer, React 18 or 19.
 
 ### 2. Build the bindings once
 

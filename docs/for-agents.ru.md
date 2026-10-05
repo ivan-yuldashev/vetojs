@@ -12,7 +12,7 @@ npm install @vetojs/react           # по желанию: <Can>, useCan, useAbi
 npm install @vetojs/drizzle         # по желанию: политика как SQL WHERE
 ```
 
-Только ESM, Node 20+. `@vetojs/core` — peer-зависимость двух других пакетов; React 18 или 19.
+Только ESM, Node 22+. `@vetojs/core` — peer-зависимость двух других пакетов; React 18 или 19.
 
 ## Весь путь
 
