@@ -236,7 +236,7 @@ Size matters where the rules travel to the browser. [A test](packages/core/tests
 |---|---|---|
 | build an ability from trusted rules, check a row | 6.3 kB gzip | **3.9 kB gzip** |
 | the same, having first validated the rules that arrived | no equivalent step | 5.5 kB gzip |
-| the whole package | 6.9 kB gzip | 7.1 kB gzip |
+| the whole package | 6.9 kB gzip | 7.0 kB gzip |
 | gate a server component | — | 98 bytes |
 
 Speed was compared on the same rules and the same rows as in [what a check costs](#what-a-check-costs), median of ten runs. Next to each number, the moment something pays it:
