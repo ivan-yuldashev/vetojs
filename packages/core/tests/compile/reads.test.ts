@@ -30,6 +30,14 @@ describe("walking the relations a check reaches", () => {
 		expect(walks([comments], { comments: [] })).not.toThrow();
 	});
 
+	it("throws for a relation set back to undefined after it was marked loaded", () => {
+		const marked = markLoaded({}, "team", null);
+
+		expect(walks([team], { ...marked, team: undefined })).toThrow(
+			RelationNotLoadedError,
+		);
+	});
+
 	it("walks into a to-one relation and finds what it left unloaded", () => {
 		expect(walks([author], { author: { id: "u1" } })).toThrowError(
 			expect.objectContaining({ relation: "team" }),

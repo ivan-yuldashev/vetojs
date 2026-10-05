@@ -33,6 +33,7 @@ export {
 	RelationKind,
 	RuleEffect,
 } from "./model/index.js";
+export type { LoadedRelations } from "./row/index.js";
 export { markLoaded } from "./row/index.js";
 export type { RuleParseResult } from "./validate/index.js";
 export { parseRules } from "./validate/index.js";

@@ -51,11 +51,29 @@ A row assembled by hand needs the relation key set: `{ ...post, author }`. `mark
 
 In SQL a relation becomes an `EXISTS` subquery — see the [Drizzle adapter](./drizzle.md#relations).
 
+## Relations a serializer dropped
+
+Some sources leave empty values out: `jsonb_strip_nulls`, Go's `omitempty`, Jackson's `NON_NULL` and `NON_EMPTY`, protobuf JSON. A relation that was loaded and came back empty then has no key, and the check throws as if it had never been loaded. Name the relations you loaded, written as the row would look with each of them empty:
+
+```ts
+type Author = { id: string; role: string };
+type PostFromApi = {
+	id: string;
+	author?: Author | null;
+	comments?: { id: string; author?: Author | null }[];
+};
+
+const ready = markLoaded(json as PostFromApi, { author: null, comments: [{ author: null }] });
+```
+
+`null` fills a missing to-one and `[]` a missing list. An object goes into the related row, and `[{ … }]` into every row of a list. A value that is there stays as it is, and a relation you do not name stays unloaded. The shape is checked against the type of the row you pass — the data as it arrived, relations included: `comments: null` does not compile where that type keeps the list from being `null`. `LoadedRelations<PostFromApi>` names the shape, so it can live beside the request that fetches the rows.
+
 ## Why it works this way
 
 - **A missing relation throws.** Reading it as "doesn't match" would turn a forgotten `include` into a policy change, and a `deny` would quietly stop applying.
 - **An id where a row was expected throws too.** Selecting `authorId` instead of the author is the commonest way to forget a load.
 - **Other garbage is unknown, not an error**, so corrupt data fails closed instead of crashing the request.
+- **`markLoaded` fills only what you name.** A source that drops empty values cannot tell empty from never requested. Only the code that sent the query knows what it asked for, so the list comes from there, and a relation left off it still throws.
 
 ## Source
 

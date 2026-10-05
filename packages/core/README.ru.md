@@ -112,7 +112,7 @@ allow("read", "post", { where: { status: "archived" } });
 - [`buildAbility(ac, rules)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.ru.md) — превращает плоский массив в `ability`.
 - [`withEnv(ability, env)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.ru.md#withenv--окружение-запроса) — подставляет окружение одного запроса — час, IP, прошла ли сессия MFA, — когда в объявлениях есть `env`, а правила читают его в `when`.
 - [`parseRules(json)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/parse.ru.md) — проверяет недоверенный JSON правил на границе.
-- [`markLoaded`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.ru.md) — копия строки, собранной руками, с заданной связью.
+- [`markLoaded`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.ru.md) — копия строки с заданной связью или с восстановленными связями, которые выбросил сериализатор.
 - `ConditionOperator` — `eq`, `ne`, `in`, `nin`, `gt`, `gte`, `lt`, `lte`, `contains`, `exists`, `has`, `hasAny`, `hasAll`; `{ ref: "field" }` на месте значения [сравнивает два поля](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/conditions.ru.md#сравнение-двух-полей) строки.
 - `ForbiddenError`, `RelationNotLoadedError` — два единственных класса в пакете.
 
