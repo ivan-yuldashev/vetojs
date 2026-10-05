@@ -48,6 +48,14 @@ const isStringArray = (value: unknown): value is string[] => {
 	);
 };
 
+const isNonFinite = (item: unknown): boolean => {
+	return typeof item === "number" && !Number.isFinite(item);
+};
+
+const carriesNonFinite = (value: unknown): boolean => {
+	return Array.isArray(value) ? value.some(isNonFinite) : isNonFinite(value);
+};
+
 const validateComparison: ShapeValidator = (
 	node,
 	path,
@@ -107,6 +115,13 @@ const validateFieldNode = (
 		return;
 	}
 
+	if (carriesNonFinite(value)) {
+		errors.push(
+			`${path}.value: expected a finite number — JSON carries NaN and ±Infinity as null`,
+		);
+		return;
+	}
+
 	if (op === ConditionOperator.Exists && typeof value !== "boolean") {
 		errors.push(`${path}.value: expected a boolean for "exists"`);
 		return;
@@ -123,8 +138,8 @@ const validateFieldNode = (
 		op === ConditionOperator.LessThan ||
 		op === ConditionOperator.LessThanOrEqual;
 
-	if (isOrdered && typeof value !== "number" && typeof value !== "string") {
-		errors.push(`${path}.value: expected a number or a string for "${op}"`);
+	if (isOrdered && typeof value !== "number") {
+		errors.push(`${path}.value: expected a number for "${op}"`);
 		return;
 	}
 

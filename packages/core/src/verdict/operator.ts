@@ -2,61 +2,29 @@ import { ConditionOperator } from "../model/index.js";
 import { kleeneAndOver, kleeneNot, kleeneOrOver } from "./kleene.js";
 import type { Verdict } from "./verdict.types.js";
 
-const normalize = (value: unknown): number | string | bigint | undefined => {
-	if (typeof value === "string" || typeof value === "bigint") {
-		return value;
+const numberOf = (value: unknown): number | bigint | undefined => {
+	const plain = value instanceof Date ? value.getTime() : value;
+
+	if (typeof plain === "number") {
+		return Number.isNaN(plain) ? undefined : plain;
 	}
 
-	if (typeof value === "number") {
-		return Number.isNaN(value) ? undefined : value;
-	}
-
-	if (value instanceof Date) {
-		const time = value.getTime();
-		return Number.isNaN(time) ? undefined : time;
-	}
-
-	return undefined;
+	return typeof plain === "bigint" ? plain : undefined;
 };
 
-const isPresent = (value: unknown): boolean => {
-	return value !== undefined && value !== null;
-};
+const compare = (actual: unknown, expected: unknown): number | undefined => {
+	const left = numberOf(actual);
+	const right = numberOf(expected);
 
-const isObjectLike = (value: unknown): boolean => {
-	return (
-		typeof value === "object" && value !== null && !(value instanceof Date)
-	);
-};
-
-type OrderableKind = "number" | "string" | "other";
-
-const orderableKind = (value: unknown): OrderableKind => {
-	if (
-		typeof value === "number" ||
-		typeof value === "bigint" ||
-		value instanceof Date
-	) {
-		return "number";
+	if (left === undefined || right === undefined) {
+		return undefined;
 	}
 
-	if (typeof value === "string") {
-		return "string";
-	}
-
-	return "other";
-};
-
-const compareSign = (left: number | string | bigint, right: typeof left) => {
 	if (left < right) {
 		return -1;
 	}
 
-	if (left > right) {
-		return 1;
-	}
-
-	return 0;
+	return left > right ? 1 : 0;
 };
 
 const ordered = (
@@ -64,60 +32,30 @@ const ordered = (
 	expected: unknown,
 	satisfies: (sign: number) => boolean,
 ): Verdict => {
-	if (!isPresent(actual) || !isPresent(expected)) {
+	if (actual === null) {
 		return false;
 	}
 
-	const kind = orderableKind(actual);
+	const sign = compare(actual, expected);
 
-	if (kind !== orderableKind(expected) || kind === "other") {
-		return undefined;
-	}
-
-	const left = normalize(actual);
-	const right = normalize(expected);
-
-	if (left === undefined || right === undefined) {
-		return undefined;
-	}
-
-	return satisfies(compareSign(left, right));
-};
-
-const equals = (a: unknown, b: unknown): boolean => {
-	if (a instanceof Date && b instanceof Date) {
-		return a.getTime() === b.getTime();
-	}
-
-	if (a instanceof Date && typeof b === "number") {
-		return a.getTime() === b;
-	}
-
-	if (typeof a === "number" && b instanceof Date) {
-		return a === b.getTime();
-	}
-
-	if (typeof a === "bigint" && typeof b === "number") {
-		return Number.isInteger(b) && a === BigInt(b);
-	}
-
-	if (typeof a === "number" && typeof b === "bigint") {
-		return Number.isInteger(a) && BigInt(a) === b;
-	}
-
-	return a === b;
+	return sign === undefined ? undefined : satisfies(sign);
 };
 
 const equalsVerdict = (actual: unknown, expected: unknown): Verdict => {
-	if (
-		isPresent(actual) &&
-		isPresent(expected) &&
-		(isObjectLike(actual) || isObjectLike(expected))
-	) {
-		return undefined;
+	if (actual === null || expected === null || expected === undefined) {
+		return actual === expected;
 	}
 
-	return equals(actual, expected);
+	if (
+		typeof actual === typeof expected &&
+		(typeof actual === "string" || typeof actual === "boolean")
+	) {
+		return actual === expected;
+	}
+
+	const sign = compare(actual, expected);
+
+	return sign === undefined ? undefined : sign === 0;
 };
 
 const memberVerdict = (actual: unknown, expected: unknown): Verdict => {
@@ -143,7 +81,7 @@ const memberVerdict = (actual: unknown, expected: unknown): Verdict => {
 };
 
 const containsVerdict = (actual: unknown, expected: unknown): Verdict => {
-	if (typeof expected !== "string" || !isPresent(actual)) {
+	if (typeof expected !== "string" || actual === null) {
 		return false;
 	}
 
@@ -158,7 +96,7 @@ const overElements = (
 		return decide(actual);
 	}
 
-	return isPresent(actual) ? undefined : false;
+	return actual === null ? false : undefined;
 };
 
 const overWanted = (
@@ -180,6 +118,10 @@ export const evaluateOperator = (
 	actual: unknown,
 	expected: unknown,
 ): Verdict => {
+	if (actual === undefined) {
+		return undefined;
+	}
+
 	switch (operator) {
 		case ConditionOperator.Equal:
 			return equalsVerdict(actual, expected);
@@ -201,7 +143,7 @@ export const evaluateOperator = (
 			return containsVerdict(actual, expected);
 		case ConditionOperator.Exists:
 			return typeof expected === "boolean"
-				? isPresent(actual) === expected
+				? (actual !== null) === expected
 				: undefined;
 		case ConditionOperator.Has:
 			return overElements(actual, (elements) =>

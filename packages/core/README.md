@@ -176,7 +176,7 @@ The wrapped function keeps its original signature: `(id: string) => Promise<…>
 
 ## Bad data and missing relations
 
-A wrong-typed field, `NaN` or an object compared by value answers **unknown**: an `allow` grants nothing, a `deny` fires ([operators](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.md)).
+A wrong-typed field, a field the row lacks, `NaN` or an object compared by value answers **unknown**: an `allow` grants nothing, a `deny` fires ([operators](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/operators.md)).
 
 A rule that reads `post.author.role` needs the author loaded. Without it `can()` throws `RelationNotLoadedError` instead of answering "doesn't match":
 
@@ -190,7 +190,7 @@ ability.can("update", "post", post);
 ## How it's built
 
 - **Types infer themselves.** One `defineAbilities` declaration — from there your editor fills in actions, resources, fields and operators. No hand-written generics, no `any`.
-- **Small, with nothing underneath.** Building an ability and checking a row is 3.9 kB gzip; with validation of the rules that arrived, 5.5 kB. 0 dependencies, ESM only, `sideEffects: false`.
+- **Small, with nothing underneath.** Building an ability and checking a row is 3.7 kB gzip; with validation of the rules that arrived, 5.4 kB. 0 dependencies, ESM only, `sideEffects: false`.
 - **No hidden state.** Bar two error classes, there are no classes in the package. `buildAbility` mutates nothing and caches nothing between requests.
 - **Runs anywhere JavaScript does.** Node, the browser, Cloudflare Workers, Vercel Edge, Deno, Bun — the same bundle, with no platform branches.
 
@@ -201,7 +201,7 @@ CASL is the most widely used authorization library in the ecosystem. If you are 
 | Task | CASL | @vetojs/core |
 |---|---|---|
 | Dependencies | 1 direct, 4 in the tree | **0** |
-| Build an ability and check a row | 6.3 kB gzip | **3.9 kB gzip** |
+| Build an ability and check a row | 6.3 kB gzip | **3.7 kB gzip** |
 | Send permissions to the client | rebuild: `createMongoAbility(rules)` | the same array: `buildAbility(ac, rules)` |
 | Declare actions and resources | list them as pairs in a generic | inferred from `defineAbilities` |
 | Filter a database query | an adapter per ORM, and none for SQL | `ability.where()` returns a condition tree the `WHERE` is built from |

@@ -50,8 +50,13 @@ allow("update", { post: ["title", "status"] }, {
 // { title: "New title" }  → ok
 // { status: "draft" }     → ok
 // { status: "published" } → status: value not permitted
+// { status: 5 }           → status: value not permitted
 // { featured: true }      → featured: field not permitted
 ```
+
+A value rule speaks only about its own field. A field the write leaves out is not asked: `{ title: "New title" }` passes the rule above, and a `deny` on a value of `status` forbids nothing in it. A key sent with `undefined`, a value of the wrong type or `NaN` is unknown: an `allow` refuses it, a `deny` denies it.
+
+Whether a field must be present is a question of shape. On a create, `values: { status: { in: ["draft"] } }` lets a write without `status` through and the database default applies — require the field in the schema, or give the column a safe default.
 
 An empty `violations` list is still a refusal: the write was turned down whole, by a `deny` with no fields or values, or for want of an `allow`.
 
@@ -77,6 +82,7 @@ if (!result.ok) {
 - **One violation per field** — the first, most specific reason.
 - **A `deny` with no `fields` or `values` vetoes the whole write**, so sending only permitted fields cannot get around it.
 - **A `deny` with `fields` or `values` speaks about data, not rows.** It removes fields or values from what may be written and leaves `can` and `canMutate` alone; read as a row rule, "never this field" would mean "never this action".
+- **A value rule is about its own field.** A write is a list of changes, and a field it leaves out is not changed, so there is nothing to judge. A row is a snapshot, and a field missing from it is unknown.
 - **On a `deny`, `fields` and `values` do not combine.** A field listed in `fields` is removed whatever it carries; write a forbidden value with `values` alone.
 
 ## Source

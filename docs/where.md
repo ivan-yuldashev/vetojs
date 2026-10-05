@@ -21,7 +21,7 @@ const rows = await db.select().from(posts)
 can(action, resource, row)   ⟺   row matches where(action, resource)
 ```
 
-A conformance test runs both paths over a grid of rows — `null`s, missing fields, wrong types — and requires identical sets. The Drizzle adapter runs the same grid against Postgres.
+A conformance test runs both paths over a grid of rows — `null`s, missing fields, wrong types — and requires identical sets. The Drizzle adapter runs its own grid against Postgres, with `can()` reading the rows the driver returns.
 
 ## How rules become one condition
 

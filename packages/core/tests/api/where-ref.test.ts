@@ -30,7 +30,8 @@ describe("a field compared with another field of the same row", () => {
 			["lte", 5n, 6, "yes"],
 			["lte", new Date(1000), new Date(2000), "yes"],
 			["eq", new Date(1000), 1000, "yes"],
-			["lte", "a", "b", "yes"],
+			["lte", "a", "b", "unknown"],
+			["eq", "a", "a", "yes"],
 		];
 
 	it.each(
@@ -70,9 +71,18 @@ describe("a field compared with another field of the same row", () => {
 		expect(
 			answerOf(ref("spent", "eq", "limit"), { id: "p1", spent: {}, limit: {} }),
 		).toBe("unknown");
-		expect(
-			answerOf(ref("spent", "eq", "limit"), { id: "p1", spent: 5, limit: "5" }),
-		).toBe("no");
+		for (const op of ["eq", "ne"]) {
+			expect(
+				answerOf(ref("spent", op, "limit"), { id: "p1", spent: 5, limit: "5" }),
+			).toBe("unknown");
+			expect(
+				answerOf(ref("spent", op, "limit"), {
+					id: "p1",
+					spent: true,
+					limit: "true",
+				}),
+			).toBe("unknown");
+		}
 	});
 
 	it("reads only the row's own fields", () => {

@@ -237,6 +237,16 @@ describe("the field a value constraint stands on", () => {
 		expect(write(ability, { status: "draft" }).ok).toBe(true);
 	});
 
+	it("has nothing to decide about a field the write leaves out", () => {
+		const ability = buildAbility(ac, [
+			allow("update", "post"),
+			deny("update", "post", { values: FORBIDDEN }),
+		]);
+
+		expect(write(ability, { title: "t" }).ok).toBe(true);
+		expect(withoutRow(ability, { title: "t" }).ok).toBe(true);
+	});
+
 	it("is not reached when the field itself is not permitted", () => {
 		const ability = buildAbility(ac, [
 			allow("update", { post: ["title"] }),
@@ -310,10 +320,7 @@ describe("the shape of a value constraint", () => {
 				{ field: "title", op: "contains", value: 5 },
 				'expected a string for "contains"',
 			],
-			[
-				{ field: "views", op: "gt", value: null },
-				'expected a number or a string for "gt"',
-			],
+			[{ field: "views", op: "gt", value: null }, 'expected a number for "gt"'],
 			[{ field: "status", op: "like", value: "d" }, 'unknown operator "like"'],
 		];
 

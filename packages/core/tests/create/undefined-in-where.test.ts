@@ -180,12 +180,15 @@ describe("a condition that would vanish is refused", () => {
 			expect(ability.can("update", "post", { ...post, orgId: "" })).toBe(true);
 		});
 
-		it("keeps exists, which asks about a field that is not there", () => {
+		it("keeps exists, which asks whether a field is empty", () => {
 			const ability = buildAbility(ac, [
 				allow("read", "post", { where: { authorId: { exists: false } } }),
 			]);
 
-			expect(ability.can("read", "post", { id: "p3" } as Post)).toBe(true);
+			expect(ability.can("read", "post", { ...post, authorId: null })).toBe(
+				true,
+			);
+			expect(ability.can("read", "post", { id: "p3" } as Post)).toBe(false);
 			expect(ability.can("read", "post", post)).toBe(false);
 		});
 	});

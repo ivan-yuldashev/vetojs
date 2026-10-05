@@ -56,10 +56,11 @@ describe("a value the rule itself gets wrong", () => {
 			["exists", "yes", 'expected a boolean for "exists"'],
 			["contains", 5, 'expected a string for "contains"'],
 			["contains", null, 'expected a string for "contains"'],
-			["gt", null, 'expected a number or a string for "gt"'],
-			["gte", {}, 'expected a number or a string for "gte"'],
-			["lt", true, 'expected a number or a string for "lt"'],
-			["lte", [10], 'expected a number or a string for "lte"'],
+			["gt", null, 'expected a number for "gt"'],
+			["gte", {}, 'expected a number for "gte"'],
+			["lt", true, 'expected a number for "lt"'],
+			["lte", [10], 'expected a number for "lte"'],
+			["gt", "b", 'expected a number for "gt"'],
 			["like", "x", 'unknown operator "like"'],
 		];
 

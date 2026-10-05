@@ -123,9 +123,11 @@ afterAll(async () => {
 	await client.close();
 });
 
+const loaded = (): Promise<Post[]> => db.select().from(posts);
+
 const expectIdentity = async (rules: Rule[]): Promise<string[]> => {
 	const ability = buildAbility(ac, rules as CheckedRules);
-	const engineVisible = rows
+	const engineVisible = (await loaded())
 		.filter((row) => ability.can("read", "post", row))
 		.map((row) => row.id)
 		.sort();
@@ -296,7 +298,7 @@ describe("toDrizzle — conformance with the engine (identity over a NULL grid)"
 });
 
 describe("toDrizzle — loud failures instead of a silently wrong filter", () => {
-	it("throws on a relation node (EXISTS is a follow-up)", () => {
+	it("throws on a relation node, which needs the table map", () => {
 		const node = {
 			relation: "comments",
 			type: "many" as const,
@@ -441,7 +443,7 @@ describe("toDrizzle — edge semantics", () => {
 		expect(() => toDrizzle(node, posts)).toThrow(/has no SQL translation/);
 	});
 
-	describe("scalar type-mismatch mirrors the engine (no coercion leak)", () => {
+	describe("a rule value of the wrong type is unknown, never coerced", () => {
 		const raw = (field: string, op: string, value: unknown): Rule[] => [
 			{
 				effect: "allow",
@@ -451,20 +453,21 @@ describe("toDrizzle — edge semantics", () => {
 			},
 		];
 
-		it("eq: string value against an int column matches nothing (engine ===)", async () => {
+		it("eq: a string against an int column matches nothing", async () => {
 			expect(await expectIdentity(raw("views", "eq", "200"))).toEqual([]);
 		});
 
-		it("eq: number value against a text column matches nothing", async () => {
+		it("eq: a number against a text column matches nothing", async () => {
 			expect(await expectIdentity(raw("status", "eq", 200))).toEqual([]);
 		});
 
-		it("ne: string value against an int column matches everything", async () => {
-			const visible = await expectIdentity(raw("views", "ne", "200"));
-			expect(visible.length).toBeGreaterThan(0);
+		it("ne: a string against an int column matches only the rows where the column is NULL", async () => {
+			expect(await expectIdentity(raw("views", "ne", "200"))).toEqual([
+				"null-views",
+			]);
 		});
 
-		it("gt: string value against an int column is undecidable → nothing", async () => {
+		it("gt: a string against an int column is unknown, so it grants nothing", async () => {
 			expect(await expectIdentity(raw("views", "gt", "100"))).toEqual([]);
 		});
 
@@ -472,9 +475,10 @@ describe("toDrizzle — edge semantics", () => {
 			expect(await expectIdentity(raw("views", "contains", "0"))).toEqual([]);
 		});
 
-		it("in: a type-mismatched member never matches (mixed list)", async () => {
-			const visible = await expectIdentity(raw("views", "in", [200, "10"]));
-			expect(visible).not.toContain("draft");
+		it("in: a member of another type matches nothing and leaves the others unknown", async () => {
+			expect(await expectIdentity(raw("views", "in", [200, "10"]))).toEqual([
+				"published",
+			]);
 		});
 
 		it("contains: a non-string rule value is decidably false, as in the engine", async () => {
@@ -498,28 +502,54 @@ describe("toDrizzle — edge semantics", () => {
 				},
 			];
 
-			const mismatches: [string, string, unknown][] = [
-				["views", "eq", "200"],
-				["views", "ne", "200"],
-				["views", "gt", "100"],
-				["views", "gte", "100"],
-				["views", "lt", "100"],
-				["views", "lte", "100"],
-				["views", "contains", "0"],
-				["views", "in", [200, "10"]],
-				["status", "eq", 200],
-				["status", "gt", 200],
-				["publishedAt", "gt", "2026-01-01"],
-				["publishedAt", "lte", "2026-01-01"],
-				["id", "gt", 5],
-				["tag", "contains", "x"],
-				["labels", "contains", "x"],
+			const EVERY_ROW = [
+				"draft",
+				"null-author",
+				"null-status",
+				"null-views",
+				"published",
 			];
 
-			for (const [field, op, value] of mismatches) {
-				it(`${op} on ${field} agrees with the engine, allowed or denied`, async () => {
-					await expectIdentity(raw(field, op, value));
-					await expectIdentity(vetoed(field, op, value));
+			const mismatches: [
+				field: string,
+				op: string,
+				value: unknown,
+				allowed: string[],
+				denied: string[],
+			][] = [
+				["views", "eq", "200", [], ["null-views"]],
+				["views", "ne", "200", ["null-views"], []],
+				["views", "gt", "100", [], ["null-views"]],
+				["views", "gte", "100", [], ["null-views"]],
+				["views", "lt", "100", [], ["null-views"]],
+				["views", "lte", "100", [], ["null-views"]],
+				["views", "contains", "0", [], ["null-views"]],
+				["views", "in", [200, "10"], ["published"], ["null-views"]],
+				["views", "nin", [200, "10"], ["null-views"], ["published"]],
+				["status", "eq", 200, [], ["null-status"]],
+				["status", "ne", 200, ["null-status"], []],
+				["status", "gt", 200, [], ["null-status"]],
+				["publishedAt", "gt", "2026-01-01", [], ["null-author", "null-status"]],
+				[
+					"publishedAt",
+					"lte",
+					"2026-01-01",
+					[],
+					["null-author", "null-status"],
+				],
+				["id", "gt", 5, [], []],
+				["tag", "contains", "x", [], EVERY_ROW],
+				["status", "gt", "b", [], ["null-status"]],
+				["tag", "gt", "b", [], ["null-author", "null-status", "null-views"]],
+				["labels", "contains", "x", [], ["null-views"]],
+			];
+
+			for (const [field, op, value, allowed, denied] of mismatches) {
+				it(`${op} on ${field} grants nothing it cannot decide and denies what it cannot decide`, async () => {
+					expect(await expectIdentity(raw(field, op, value))).toEqual(allowed);
+					expect(await expectIdentity(vetoed(field, op, value))).toEqual(
+						denied,
+					);
 				});
 			}
 
@@ -529,7 +559,7 @@ describe("toDrizzle — edge semantics", () => {
 					vetoed("views", "gt", "100") as CheckedRules,
 				);
 
-				const allowed = rows
+				const allowed = (await loaded())
 					.filter((row) => ability.can("read", "post", row))
 					.map((row) => row.id);
 
@@ -560,7 +590,7 @@ describe("toDrizzle — edge semantics", () => {
 		});
 	});
 
-	describe("open findings — an it.fails turns red once the finding is fixed", () => {
+	describe("findings that stay closed", () => {
 		const vetoed = (field: string, op: string, value: unknown): Rule[] => [
 			{ effect: "allow", action: "read", resource: "post" },
 			{
@@ -573,7 +603,7 @@ describe("toDrizzle — edge semantics", () => {
 
 		const refusedOrFaithful = async (rules: Rule[]): Promise<boolean> => {
 			const ability = buildAbility(ac, rules as CheckedRules);
-			const engineVisible = rows
+			const engineVisible = (await loaded())
 				.filter((row) => ability.can("read", "post", row))
 				.map((row) => row.id)
 				.sort();
@@ -630,19 +660,36 @@ describe("toDrizzle — edge semantics", () => {
 			tag: null,
 			labels: null,
 		});
-		rows.push({
-			id: "percent",
-			authorId: "u3",
-			status: "100%_done",
-			views: 1,
-			publishedAt: null,
-			tag: null,
-			labels: null,
-		});
 
 		const visible = await expectIdentity([
 			allow("read", "post", { where: { status: { contains: "%_" } } }),
 		]);
 		expect(visible).toEqual(["percent"]);
+	});
+
+	it("each LIKE metacharacter in contains is matched literally on its own", async () => {
+		await db.insert(posts).values(
+			["a\\b", "a%b", "a_b", "ab"].map((status, index) => ({
+				id: `meta-${index}`,
+				authorId: "u3",
+				status,
+				views: 1,
+				publishedAt: null,
+				tag: null,
+				labels: null,
+			})),
+		);
+
+		for (const [needle, holder] of [
+			["\\", "meta-0"],
+			["%", "meta-1"],
+			["_", "meta-2"],
+		] as const) {
+			const visible = await expectIdentity([
+				allow("read", "post", { where: { status: { contains: needle } } }),
+			]);
+
+			expect(visible).toContain(holder);
+		}
 	});
 });

@@ -319,7 +319,7 @@ describe("a condition on a field the resource does not declare", () => {
 		expect(written).toBeTypeOf("function");
 	});
 
-	it("reads the field as absent when it arrives from outside", () => {
+	it("answers unknown for it when it arrives from outside, so an allow grants nothing and a deny fires", () => {
 		const where = { field: "ghost", op: "eq", value: 1 };
 		const granting = buildAbility(
 			ac,
@@ -336,7 +336,7 @@ describe("a condition on a field the resource does not declare", () => {
 		);
 
 		expect(rowsFor(granting, "update")).toEqual([]);
-		expect(rowsFor(denying, "update")).toEqual(["mine", "theirs", "archived"]);
+		expect(rowsFor(denying, "update")).toEqual([]);
 	});
 
 	it("reads only the row's own field, never one it inherits", () => {
@@ -355,9 +355,9 @@ describe("a condition on a field the resource does not declare", () => {
 
 		expect(granting.can("update", "post", inherited)).toBe(false);
 		expect(denying.can("update", "post", inherited)).toBe(false);
-		expect(compileMatcher(granting.where("update", "post"))(inherited)).toBe(
-			false,
-		);
+		expect(
+			compileMatcher(granting.where("update", "post"))(inherited),
+		).toBeUndefined();
 	});
 });
 

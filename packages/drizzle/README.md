@@ -109,9 +109,9 @@ A row the policy hides does not match — the statement touches nothing, and an 
 
 ## Where SQL and JavaScript disagree
 
-Translating the condition into SQL one for one breaks the guarantee — because of `NULL`. `NOT (amount > 1000)` with a `NULL` amount is `UNKNOWN` in SQL, so `WHERE` drops the row — while the engine treats the missing value as a decidable non-match and allows it. A deny-filtered query would then hide a row the user is entitled to see.
+Translating the condition into SQL one for one breaks the guarantee — because of `NULL`. `NOT (amount > 1000)` with a `NULL` amount is `UNKNOWN` in SQL, so `WHERE` drops the row — while the engine treats `null` as a decidable non-match and allows it. A deny-filtered query would then hide a row the user is entitled to see.
 
-So every leaf predicate compiles to something always true or false — `IS DISTINCT FROM`, `COALESCE(…, FALSE)`, and so on — and a mistyped value is answered on the spot rather than handed to Postgres, which would coerce `'5000' > 1000` into showing a row the engine denies.
+So every leaf predicate compiles to something true or false wherever the engine decides — `IS DISTINCT FROM`, `COALESCE(…, FALSE)`, and so on — and to `NULL` only where the engine answers unknown. A mistyped value is answered that way on the spot rather than handed to Postgres, which would coerce `'5000' > 1000` into showing a row the engine denies.
 
 A condition comparing two fields — `{ spent: { lte: { ref: "limit" } } }` — compiles to a comparison of the two columns, unknown when either is `NULL` or `NaN`, as in the engine.
 

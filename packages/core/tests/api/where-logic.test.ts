@@ -92,22 +92,30 @@ describe("nested groups", () => {
 describe("one condition holds and the data for the other is missing", () => {
 	const full = { id: "p1", status: "draft" };
 
-	it("answers no under and when the missing field cannot exceed anything", () => {
-		expect(answerOf({ and: [Y, node("views", "gt", 10)] }, full)).toBe("no");
+	it("answers unknown under and when the other field is missing", () => {
+		expect(answerOf({ and: [Y, node("views", "gt", 10)] }, full)).toBe(
+			"unknown",
+		);
 	});
 
 	it("answers unknown under and when the other field holds the wrong type", () => {
 		expect(answerOf({ and: [Y, U] }, row)).toBe("unknown");
 	});
 
-	it("answers yes under and when the missing field is asked to differ", () => {
+	it("answers unknown under and when the missing field is asked to differ", () => {
 		expect(answerOf({ and: [Y, node("authorId", "ne", "u2")] }, full)).toBe(
-			"yes",
+			"unknown",
 		);
 	});
 
-	it("answers no under or when the other branch fails and the field is missing", () => {
-		expect(answerOf({ or: [N, node("views", "gt", 10)] }, full)).toBe("no");
+	it("answers unknown under or when the other branch fails and the field is missing", () => {
+		expect(answerOf({ or: [N, node("views", "gt", 10)] }, full)).toBe(
+			"unknown",
+		);
+	});
+
+	it("answers no under and when the other branch fails, whatever the field lacks", () => {
+		expect(answerOf({ and: [N, node("views", "gt", 10)] }, full)).toBe("no");
 	});
 
 	it("answers yes under or when one branch holds, whatever the other lacks", () => {
@@ -240,7 +248,7 @@ describe("an or whose first branches refuse and a later one holds", () => {
 			["an absent field, unknown, no, then yes", { or: [A, U, N, Y] }, "yes"],
 			["no, an absent field, then unknown", { or: [N, A, U] }, "unknown"],
 			["no three times", { or: [N, N, N] }, "no"],
-			["an absent field twice", { or: [A, A] }, "no"],
+			["an absent field twice", { or: [A, A] }, "unknown"],
 			[
 				"an and that fails, an and that is unknown, then an and that holds",
 				{ or: [{ and: [Y, N] }, { and: [Y, U] }, { and: [Y, Y] }] },

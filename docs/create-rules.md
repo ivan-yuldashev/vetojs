@@ -68,7 +68,7 @@ type Rule = {
 };
 ```
 
-It survives `JSON.stringify`, a database and the network unchanged. Read it back through [`parseRules`](./parse.md).
+It survives `JSON.stringify`, a database and the network unchanged. A value JSON would turn into `null` — `NaN`, ±`Infinity`, an invalid `Date` — is refused when the rule is written, as `undefined` is. Read it back through [`parseRules`](./parse.md).
 
 `buildAbility` takes only rules that passed a check — these factories or `parseRules` — so a hand-written literal does not compile:
 

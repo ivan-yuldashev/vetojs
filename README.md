@@ -192,7 +192,7 @@ The questions that come once the idea fits: what happens on bad data, where the 
 - **Rules are plain JSON, not class instances.** Put them in a server component's props, in a SvelteKit `load`, or in a Nuxt payload, and they work on the other side as they are.
 - **No hidden state.** Bar two error classes, there are no classes in the package. `buildAbility` mutates nothing and caches nothing between requests.
 - **Types infer themselves.** One `defineAbilities` declaration — from there your editor fills in actions, resources, fields and operators. No hand-written generics, no `any`.
-- **5.5 kB gzipped.** That is the whole client-side path: validate the rules that arrived, build an ability, check a row. If the rules are already trusted, the size drops to 3.9 kB, and a check inside a server component costs a mere 98 bytes.
+- **5.4 kB gzipped.** That is the whole client-side path: validate the rules that arrived, build an ability, check a row. If the rules are already trusted, the size drops to 3.7 kB, and a check inside a server component costs a mere 98 bytes.
 - **0 dependencies.** One package to update and audit, not a tree.
 - **Runs anywhere JavaScript does.** Node, the browser, Cloudflare Workers, Vercel Edge, Deno, Bun — the same bundle, with no platform branches.
 
@@ -234,8 +234,8 @@ Size matters where the rules travel to the browser. [A test](packages/core/tests
 
 | | CASL | @vetojs |
 |---|---|---|
-| build an ability from trusted rules, check a row | 6.3 kB gzip | **3.9 kB gzip** |
-| the same, having first validated the rules that arrived | no equivalent step | 5.5 kB gzip |
+| build an ability from trusted rules, check a row | 6.3 kB gzip | **3.7 kB gzip** |
+| the same, having first validated the rules that arrived | no equivalent step | 5.4 kB gzip |
 | the whole package | 6.9 kB gzip | 7.0 kB gzip |
 | gate a server component | — | 98 bytes |
 

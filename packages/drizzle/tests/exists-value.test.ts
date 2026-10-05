@@ -49,7 +49,7 @@ afterAll(async () => {
 
 const identical = async (rules: Rule[]): Promise<string[]> => {
 	const ability = buildAbility(ac, rules as CheckedRules);
-	const engine = rows
+	const engine = (await db.select().from(posts))
 		.filter((row) => ability.can("read", "post", row))
 		.map((row) => row.id)
 		.sort();

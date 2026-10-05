@@ -72,7 +72,12 @@ relation("a to-one relation", author(node("role", "eq", "admin")), [
 	],
 	["an author who is an admin", post({ author: { role: "admin" } }), "yes"],
 	["an author who is not", post({ author: { role: "user" } }), "no"],
-	["an author without the field", post({ author: { id: "a1" } }), "no"],
+	["an author without the field", post({ author: { id: "a1" } }), "unknown"],
+	[
+		"an author whose field holds another type",
+		post({ author: { role: 5 } }),
+		"unknown",
+	],
 	[
 		"an author whose field is an object",
 		post({ author: { role: {} } }),
@@ -97,6 +102,30 @@ relation("a to-one relation", author(node("role", "eq", "admin")), [
 	["a class instance", post({ author: new Entity() }), "unknown"],
 	["a Date", post({ author: new Date(0) }), "unknown"],
 ]);
+
+relation("a to-one relation asked for null", author(node("role", "eq", null)), [
+	["an author whose field is null", post({ author: { role: null } }), "yes"],
+	["an author whose field is set", post({ author: { role: "admin" } }), "no"],
+	["an author without the field", post({ author: { id: "a1" } }), "unknown"],
+	["null, loaded and empty", post({ author: null }), "no"],
+	["absent, never loaded", post({}), "throws"],
+]);
+
+relation(
+	"a to-many relation asked whether any row differs from null",
+	comments("some", node("spam", "ne", null)),
+	[
+		["a row whose field is set", post({ comments: [{ spam: false }] }), "yes"],
+		["a row whose field is null", post({ comments: [{ spam: null }] }), "no"],
+		["a row without the field", post({ comments: [{}] }), "unknown"],
+		[
+			"a row without the field beside a set one",
+			post({ comments: [{}, { spam: true }] }),
+			"yes",
+		],
+		["an empty list", post({ comments: [] }), "no"],
+	],
+);
 
 relation(
 	"a to-many relation with some",
@@ -147,7 +176,12 @@ relation(
 			markLoaded(post({}), { comments: [] }),
 			"no",
 		],
-		["a row without the field", post({ comments: [{}] }), "no"],
+		["a row without the field", post({ comments: [{}] }), "unknown"],
+		[
+			"a row whose field holds another type",
+			post({ comments: [{ spam: "true" }] }),
+			"unknown",
+		],
 		[
 			"a row whose field is an object",
 			post({ comments: [{ spam: {} }] }),
@@ -183,7 +217,11 @@ relation(
 	"a to-many relation with every",
 	comments("every", node("spam", "eq", true)),
 	[
-		["one row lacks the field", post({ comments: [{ spam: true }, {}] }), "no"],
+		[
+			"one row lacks the field",
+			post({ comments: [{ spam: true }, {}] }),
+			"unknown",
+		],
 		[
 			"a hole between a miss and a match",
 			post({ comments: sparse(3, { 0: { spam: false }, 2: { spam: true } }) }),
@@ -233,7 +271,7 @@ relation(
 		[
 			"a row lacking the field beside a miss",
 			post({ comments: [{ spam: false }, {}] }),
-			"yes",
+			"unknown",
 		],
 		[
 			"a hole beside a match",
@@ -242,6 +280,11 @@ relation(
 		],
 		["a list of holes", post({ comments: sparse(2, {}) }), "unknown"],
 		["no row matches", post({ comments: [{ spam: false }] }), "yes"],
+		[
+			"a row whose field holds another type",
+			post({ comments: [{ spam: "true" }] }),
+			"unknown",
+		],
 		[
 			"one row matches",
 			post({ comments: [{ spam: false }, { spam: true }] }),
@@ -343,12 +386,12 @@ relation(
 		[
 			"the row that passes one lacks the other",
 			post({ comments: [{ spam: false }] }),
-			"no",
+			"unknown",
 		],
 		[
 			"the row lacks the first and passes the second",
 			post({ comments: [{ score: 6 }] }),
-			"no",
+			"unknown",
 		],
 		[
 			"an incomplete row before a complete one",
@@ -509,7 +552,7 @@ relation(
 			post({ comments: [{ tags: "x" }] }),
 			"unknown",
 		],
-		["a row without the field", post({ comments: [{}] }), "no"],
+		["a row without the field", post({ comments: [{}] }), "unknown"],
 		["a row whose field is null", post({ comments: [{ tags: null }] }), "no"],
 	],
 );
@@ -545,7 +588,7 @@ relation(
 		[
 			"one row lacks the field",
 			post({ comments: [{ status: "ok" }, {}] }),
-			"yes",
+			"unknown",
 		],
 		[
 			"one row lacks it and another is spam",
@@ -595,7 +638,7 @@ relation(
 		[
 			"the first holds and the second is absent",
 			post({ author: { role: "admin" } }),
-			"no",
+			"unknown",
 		],
 		[
 			"the first holds and the second is broken",
@@ -615,14 +658,14 @@ relation(
 		[
 			"the first is absent and the second holds",
 			post({ author: { karma: 11 } }),
-			"no",
+			"unknown",
 		],
 		[
 			"the first is broken and the second holds",
 			post({ author: { role: {}, karma: 11 } }),
 			"unknown",
 		],
-		["both are absent", post({ author: {} }), "no"],
+		["both are absent", post({ author: {} }), "unknown"],
 		["both are broken", post({ author: { role: {}, karma: "x" } }), "unknown"],
 	],
 );
@@ -646,7 +689,7 @@ relation(
 		[
 			"one row lacks the second",
 			post({ comments: [{ spam: false, score: 6 }, { spam: false }] }),
-			"no",
+			"unknown",
 		],
 		[
 			"one row has the second broken",
@@ -683,7 +726,11 @@ relation(
 			"yes",
 		],
 		["a row holds both", post({ comments: [{ spam: false, score: 6 }] }), "no"],
-		["a row lacks the second", post({ comments: [{ spam: false }] }), "yes"],
+		[
+			"a row lacks the second",
+			post({ comments: [{ spam: false }] }),
+			"unknown",
+		],
 		[
 			"a row has the second broken",
 			post({ comments: [{ spam: false, score: "x" }] }),

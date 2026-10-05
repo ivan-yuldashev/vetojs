@@ -88,7 +88,7 @@ where: {
 }
 ```
 
-Sibling keys are ANDed, one operator per field. A wrong-typed value, `NaN` or an object compared by value answers **unknown**: an `allow` grants nothing, a `deny` fires. `null` or a missing field is a plain no. `values` takes fields and `and` only; `when` takes fields of the environment and groups, no relations.
+Sibling keys are ANDed, one operator per field. A wrong-typed value, `NaN`, an object compared by value or a field the row lacks answers **unknown**: an `allow` grants nothing, a `deny` fires. `null` is a value: against anything but `null` it is a plain no. `values` takes fields and `and` only; `when` takes fields of the environment and groups, no relations.
 
 ## Guarding an entry point
 
