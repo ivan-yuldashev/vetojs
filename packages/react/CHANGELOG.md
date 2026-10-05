@@ -1,5 +1,15 @@
 # @vetojs/react
 
+## 1.1.0
+
+### Minor Changes
+
+- a766438: **Node.js 22 or newer.** The packages are tested on Node 22 and 24; `engines` now asks for `>=22`.
+
+### Patch Changes
+
+- 5395b00: **Peer ranges name the majors these packages are tested against.** `@vetojs/core` is `^1.0.0` for both, `react` is `^18.0.0 || ^19.0.0`, and `drizzle-orm` is `>=0.36.0 <1`.
+
 ## 1.0.0
 
 ### Major Changes
