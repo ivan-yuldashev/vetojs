@@ -12,7 +12,7 @@ npm install @vetojs/react           # optional: <Can>, useCan, useAbility
 npm install @vetojs/drizzle         # optional: the policy as a SQL WHERE
 ```
 
-ESM only, Node 20+. `@vetojs/core` is a peer dependency of the other two; React 18+.
+ESM only, Node 20+. `@vetojs/core` is a peer dependency of the other two; React 18 or 19.
 
 ## The whole flow
 

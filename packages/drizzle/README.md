@@ -32,7 +32,7 @@ npm install @vetojs/drizzle @vetojs/core drizzle-orm
 pnpm add @vetojs/drizzle @vetojs/core drizzle-orm
 ```
 
-ESM only, Node.js 20 or newer. Postgres for now. `@vetojs/core` and `drizzle-orm` are peer dependencies; the package adds nothing else to the tree.
+ESM only, Node.js 20 or newer. Postgres for now. `@vetojs/core` and `drizzle-orm` (0.36 or newer, before 1.0) are peer dependencies; the package adds nothing else to the tree.
 
 ### 2. Map resources to tables
 

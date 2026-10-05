@@ -8,7 +8,7 @@
 npm install @vetojs/react @vetojs/core
 ```
 
-React 18 и новее; `@vetojs/core` — peer-зависимость.
+React 18 или 19; `@vetojs/core` — peer-зависимость.
 
 ## Один раз создайте привязки
 
