@@ -19,6 +19,7 @@ import {
 	type Decision,
 	defineAbilities,
 	ForbiddenError,
+	type LoadedRelations,
 	MatchQuantifier,
 	markLoaded,
 	type PayloadResult,
@@ -251,6 +252,31 @@ describe("the rest of the runtime exports", () => {
 	it("hands markLoaded back the row type it was given", () => {
 		expectTypeOf(markLoaded(post, "author", null)).toEqualTypeOf<Post>();
 		expect(markLoaded(post, "author", null)).not.toBe(post);
+	});
+
+	it("checks the relations markLoaded is told about against the row type", () => {
+		type Comment = { id: string; author?: User | null };
+		type Article = {
+			id: string;
+			title: string;
+			author?: User | null;
+			comments?: Comment[];
+		};
+		const article: Article = { id: "a1", title: "t" };
+		const loaded = {
+			author: null,
+			comments: [{ author: null }],
+		} satisfies LoadedRelations<Article>;
+
+		expectTypeOf(markLoaded(article, loaded)).toEqualTypeOf<Article>();
+		// @ts-expect-error a to-one relation is not emptied as a list
+		markLoaded(article, { author: [] });
+		// @ts-expect-error a list its type keeps from null is not emptied as null
+		markLoaded(article, { comments: null });
+		// @ts-expect-error a field is not a relation
+		markLoaded(article, { title: null });
+		// @ts-expect-error a relation the row does not have
+		markLoaded(article, { autor: null });
 	});
 
 	it("brands its refusals so a second copy of the package still answers", () => {

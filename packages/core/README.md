@@ -112,7 +112,7 @@ allow("read", "post", { where: { status: "archived" } });
 - [`buildAbility(ac, rules)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.md) — turns a flat array into an `ability`.
 - [`withEnv(ability, env)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/ability.md#withenv--the-requests-environment) — binds the environment of one request — the hour, the IP, whether the session passed MFA — when the declarations name an `env` and rules read it in `when`.
 - [`parseRules(json)`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/parse.md) — checks untrusted rule JSON at the boundary.
-- [`markLoaded`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.md) — a copy of a hand-assembled row with a relation set.
+- [`markLoaded`](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/relations.md) — a copy of a row with a relation set, or with the relations a serializer dropped filled back in.
 - `ConditionOperator` — `eq`, `ne`, `in`, `nin`, `gt`, `gte`, `lt`, `lte`, `contains`, `exists`, `has`, `hasAny`, `hasAll`; `{ ref: "field" }` in place of a value [compares two fields](https://github.com/ivan-yuldashev/vetojs/blob/main/docs/conditions.md#comparing-two-fields) of the row.
 - `ForbiddenError`, `RelationNotLoadedError` — the only two classes in the package.
 

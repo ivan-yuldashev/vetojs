@@ -1,54 +1,81 @@
 import type { Row } from "../model/index.js";
-import { owns } from "../shared/index.js";
+import { isRow, own } from "../shared/index.js";
+import type { LoadedRelations } from "./loaded.types.js";
 
-const LOADED_MARKER = Symbol.for("veto:loaded");
+type MarkLoaded = {
+	<T extends Row>(row: T, relations: LoadedRelations<T>): T;
+	<T extends Row>(row: T, relation: string, value: unknown): T;
+};
 
-const loadedRelationNames = (row: Row): Set<string> | undefined => {
-	if (!owns(row, LOADED_MARKER)) {
-		return undefined;
+const fillRow = <T extends Row>(row: T, relations: object): T => {
+	const source: Row = row;
+
+	return {
+		...row,
+		...Object.fromEntries(
+			Object.entries(relations)
+				.filter(([, shape]) => shape !== undefined)
+				.map(([relation, shape]) => [
+					relation,
+					fillRelation(own(source, relation), shape),
+				]),
+		),
+	};
+};
+
+const fillRelation = (value: unknown, shape: unknown): unknown => {
+	if (value === undefined) {
+		return Array.isArray(shape) ? [] : null;
 	}
 
-	const marker: unknown = Reflect.get(row, LOADED_MARKER);
+	if (!Array.isArray(shape)) {
+		return isRow(shape) && isRow(value) ? fillRow(value, shape) : value;
+	}
 
-	return marker instanceof Set ? marker : undefined;
+	const [item]: unknown[] = shape;
+
+	return isRow(item) && Array.isArray(value)
+		? value.map((entry) => (isRow(entry) ? fillRow(entry, item) : entry))
+		: value;
 };
 
 /**
- * States that a relation is loaded, for data your ORM didn't assemble.
+ * States which relations a row was loaded with, for data that dropped the empty ones.
  *
- * The engine normally reads the convention Prisma, Drizzle and TypeORM already follow —
- * `undefined` means not loaded (and a check needing it throws), `null` means loaded and
- * empty. Reach for this only when that convention doesn't apply.
+ * The engine reads the convention Prisma, Drizzle and TypeORM already follow — `undefined`
+ * means not loaded (and a check needing it throws), `null` or `[]` means loaded and empty.
+ * A serializer that omits empty fields — `jsonb_strip_nulls`, Go's `omitempty`, Jackson's
+ * `NON_NULL`, protobuf JSON — leaves a loaded relation looking unloaded. Name the relations
+ * you loaded, written as the empty row would look, and every one that is missing is filled
+ * with that empty value. Present values are left as they are, and a relation you do not
+ * name stays unloaded.
  *
- * Returns a **copy**; your input is not mutated. The marker is a global symbol, so
- * `Object.keys` and `JSON.stringify` don't see it.
+ * Also takes one relation and its value, to attach related rows you loaded yourself.
  *
- * @param value - the related row(s), or `null` for loaded-but-empty
- * @throws {Error} if `value` is `undefined` — that is precisely what "not loaded" means,
- *   so marking a relation loaded with it is a contradiction
+ * Returns a **copy**; your input is not mutated.
+ *
+ * @param relations - the loaded relations, see {@link LoadedRelations}
+ * @throws {Error} if a single `value` is `undefined` — that is precisely what "not loaded"
+ *   means, so marking a relation loaded with it is a contradiction
  *
  * @example
+ * const ready = markLoaded(post, { author: null, blog: null, comments: [{ author: null }] });
  * const withAuthor = markLoaded(post, "author", author);
- * const withoutBlog = markLoaded(post, "blog", null);
  */
-export const markLoaded = <T extends Row>(
+export const markLoaded: MarkLoaded = <T extends Row>(
 	row: T,
-	relation: string,
-	value: unknown,
+	relations: string | LoadedRelations<T>,
+	value?: unknown,
 ): T => {
+	if (typeof relations !== "string") {
+		return fillRow(row, relations);
+	}
+
 	if (value === undefined) {
 		throw new Error(
-			`veto: markLoaded("${relation}", undefined) is ambiguous — undefined means "not loaded". Pass null for a loaded-but-empty relation.`,
+			`veto: markLoaded("${relations}", undefined) is ambiguous — undefined means "not loaded". Pass null for a loaded-but-empty relation.`,
 		);
 	}
 
-	const loaded = new Set(loadedRelationNames(row));
-
-	loaded.add(relation);
-
-	return { ...row, [relation]: value, [LOADED_MARKER]: loaded };
-};
-
-export const isLoaded = (row: Row, relation: string): boolean => {
-	return loadedRelationNames(row)?.has(relation) ?? false;
+	return { ...row, [relations]: value };
 };

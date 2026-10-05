@@ -61,14 +61,12 @@ export const createVetoContext = <AC extends ResourceMap>(
 	...binding: EnvBinding<AC>
 ): VetoContext<AC> => {
 	const [bind] = binding as [
-		((ability: never, env: never) => Ability<AC>) | undefined,
+		rebind?: (ability: Ability<AC>, env: unknown) => Ability<AC>,
 	];
 	const Context = createContext<AbilityStore<AC> | null>(null);
 
 	const bound = (base: Ability<AC>, env: unknown): Ability<AC> => {
-		return bind === undefined || env === undefined
-			? base
-			: bind(base as never, env as never);
+		return bind === undefined || env === undefined ? base : bind(base, env);
 	};
 
 	const AbilityProvider = (props: AbilityProviderProps<AC>) => {

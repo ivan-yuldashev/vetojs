@@ -80,6 +80,12 @@ relation("a to-one relation", author(node("role", "eq", "admin")), [
 	],
 	["null, loaded and empty", post({ author: null }), "no"],
 	["marked loaded and empty", markLoaded(post({}), "author", null), "no"],
+	["named loaded and empty", markLoaded(post({}), { author: null }), "no"],
+	[
+		"only another relation named loaded",
+		markLoaded(post({}), { comments: [] }),
+		"throws",
+	],
 	["absent, never loaded", post({}), "throws"],
 	["an id where the row belongs", post({ author: "a1" }), "throws"],
 	["a numeric id where the row belongs", post({ author: 7 }), "throws"],
@@ -136,6 +142,11 @@ relation(
 		["an empty list", post({ comments: [] }), "no"],
 		["null, loaded and empty", post({ comments: null }), "no"],
 		["marked loaded and empty", markLoaded(post({}), "comments", null), "no"],
+		[
+			"named loaded as an empty list",
+			markLoaded(post({}), { comments: [] }),
+			"no",
+		],
 		["a row without the field", post({ comments: [{}] }), "no"],
 		[
 			"a row whose field is an object",
@@ -862,6 +873,34 @@ relation(
 		],
 	],
 );
+
+describe("relations a serializer dropped", () => {
+	const banned = comments("some", author(node("role", "eq", "banned")));
+	const stripped = post({ comments: [{ id: "c1" }] });
+
+	it("throws until the dropped relation is named loaded", () => {
+		expect(() => answerOf(banned, stripped)).toThrow(RelationNotLoadedError);
+		expect(
+			answerOf(banned, markLoaded(stripped, { comments: [{ author: null }] })),
+		).toBe("no");
+	});
+
+	it("throws for a relation inside a list that was not named", () => {
+		expect(() =>
+			answerOf(banned, markLoaded(stripped, { comments: [] })),
+		).toThrow(RelationNotLoadedError);
+	});
+
+	it("reads the rows that were there", () => {
+		const row = post({
+			comments: [{ id: "c1" }, { author: { role: "banned" } }],
+		});
+
+		expect(
+			answerOf(banned, markLoaded(row, { comments: [{ author: null }] })),
+		).toBe("yes");
+	});
+});
 
 describe("two relations, one of them loaded", () => {
 	it("throws for the one never loaded, naming it", () => {

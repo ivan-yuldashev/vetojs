@@ -1,7 +1,6 @@
 import { RelationNotLoadedError } from "../errors/index.js";
 import { RelationKind, type Row } from "../model/index.js";
 import { isIdentifier, isRow, own } from "../shared/index.js";
-import { isLoaded } from "./loaded.js";
 
 const areRows = (items: readonly unknown[]): items is Row[] => {
 	for (const item of items) {
@@ -20,7 +19,7 @@ export const relatedOf = (
 ): Row[] | null => {
 	const related = own(row, relation);
 
-	if (related === undefined && !isLoaded(row, relation)) {
+	if (related === undefined) {
 		throw new RelationNotLoadedError(relation);
 	}
 

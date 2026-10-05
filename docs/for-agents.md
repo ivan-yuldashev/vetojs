@@ -52,7 +52,7 @@ ability.can("update", "post", post);
 | `buildAbility` | `(ac, rules) => Ability` | the object you ask. With `env` declared it returns an `AbilityForEnv` with nothing to ask until bound |
 | `withEnv` | `(ability, env) => Ability` | binds one request's environment; equal keys and values return the same ability |
 | `parseRules` | `(json) => { ok: true, rules } \| { ok: false, errors }` | checks the shape of untrusted rule JSON |
-| `markLoaded` | `(row, relation, value) => row` | a copy with the relation set; `null` for loaded-but-empty |
+| `markLoaded` | `(row, relation, value) => row` | `(row, relations) => row` | a copy with the relation set; `null` for loaded-but-empty. Given a shape like `{ author: null, comments: [] }`, fills the relations a serializer dropped |
 | `ForbiddenError` | class | `.action`, `.resource`, `.violations?`; test with `ForbiddenError.is(error)` |
 | `RelationNotLoadedError` | class | `.relation` |
 | `ConditionOperator` | const object | the thirteen operators, for code that walks `where()` |

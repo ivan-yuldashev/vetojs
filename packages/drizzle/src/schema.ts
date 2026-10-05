@@ -4,7 +4,7 @@ import type {
 	RelationKind,
 	ResourceMap,
 } from "@vetojs/core";
-import { and, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, type SQL, type SQLWrapper, type Table } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import {
 	type CompileEnv,
@@ -18,9 +18,11 @@ import { deriveJoinFromForeignKeys } from "./foreign-key-join.js";
 import { own } from "./own.js";
 import type { DrizzleSchema, JoinsFor, TableMap } from "./schema.types.js";
 
-type WideJoins = Partial<
-	Record<string, Partial<Record<string, JoinPredicate>>>
->;
+type WideJoin = {
+	predicate(parent: Table, child: Table): SQL;
+}["predicate"];
+
+type WideJoins = Partial<Record<string, Partial<Record<string, WideJoin>>>>;
 
 type ResolvedJoins = Record<string, Record<string, JoinResolution>>;
 
@@ -125,7 +127,7 @@ export const defineTables = <AC extends ResourceMap, M extends TableMap<AC>>(
 ): DrizzleSchema<AC> => {
 	const byResource: Record<string, PgTable | null | undefined> = tables;
 
-	const resolvedJoins = resolveJoins(ac, byResource, joins as WideJoins);
+	const resolvedJoins = resolveJoins(ac, byResource, joins);
 
 	const tableOrThrow = (resource: string, subject: string): PgTable => {
 		const table = own(byResource, resource);

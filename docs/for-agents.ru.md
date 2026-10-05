@@ -52,7 +52,7 @@ ability.can("update", "post", post);
 | `buildAbility` | `(ac, rules) => Ability` | объект, у которого спрашивают. Если объявлено `env`, возвращает `AbilityForEnv`, у которого нечего спросить до привязки |
 | `withEnv` | `(ability, env) => Ability` | привязывает окружение одного запроса; те же ключи и значения возвращают тот же ability |
 | `parseRules` | `(json) => { ok: true, rules } \| { ok: false, errors }` | проверяет форму недоверенного JSON правил |
-| `markLoaded` | `(row, relation, value) => row` | копия с заданной связью; `null` — загружено, но пусто |
+| `markLoaded` | `(row, relation, value) => row` | `(row, relations) => row` | копия с заданной связью; `null` — загружено, но пусто. С формой `{ author: null, comments: [] }` заполняет связи, которые выбросил сериализатор |
 | `ForbiddenError` | класс | `.action`, `.resource`, `.violations?`; проверяйте через `ForbiddenError.is(error)` |
 | `RelationNotLoadedError` | класс | `.relation` |
 | `ConditionOperator` | константный объект | тринадцать операторов — для кода, который обходит `where()` |
