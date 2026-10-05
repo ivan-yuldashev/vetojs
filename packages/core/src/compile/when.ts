@@ -30,9 +30,7 @@ const stateOf = (rulesByEffect: RulesByEffect): WhenState | null => {
 	);
 
 	const state: WhenState | null =
-		entries.length === 0
-			? null
-			: { entries, byKey: new Map(), last: undefined };
+		entries.length === 0 ? null : { entries, last: undefined };
 
 	rulesByEffect.when = state;
 
@@ -54,34 +52,28 @@ export const resolveWhen = (
 	}
 
 	const dropped = new Set<CompiledRule>();
-	const droppedIndexes: number[] = [];
 
-	for (const [index, entry] of state.entries.entries()) {
+	for (const entry of state.entries) {
 		const verdict = entry.match(env);
 		const isAllow = entry.compiled.rule.effect === RuleEffect.Allow;
 
 		if (verdict !== true && (isAllow || verdict === false)) {
 			dropped.add(entry.compiled);
-			droppedIndexes.push(index);
 		}
 	}
 
-	const key = droppedIndexes.join(" ");
-	let resolved = state.byKey.get(key);
+	const kept = (rules: readonly CompiledRule[]): CompiledRule[] => {
+		return rules.filter((rule) => !dropped.has(rule));
+	};
 
-	if (resolved === undefined) {
-		const kept = (rules: readonly CompiledRule[]): CompiledRule[] => {
-			return rules.filter((rule) => !dropped.has(rule));
-		};
-
-		resolved = rulesByEffectOf(
-			kept(rulesByEffect.allow),
-			kept(rulesByEffect.deny),
-			null,
-		);
-
-		state.byKey.set(key, resolved);
-	}
+	const resolved =
+		dropped.size === 0
+			? rulesByEffect
+			: rulesByEffectOf(
+					kept(rulesByEffect.allow),
+					kept(rulesByEffect.deny),
+					null,
+				);
 
 	state.last = [env, resolved];
 
