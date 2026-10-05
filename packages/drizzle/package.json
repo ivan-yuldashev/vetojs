@@ -1,6 +1,6 @@
 {
 	"name": "@vetojs/drizzle",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"description": "Permissions as SQL for Drizzle: the @vetojs policy becomes a WHERE, so a query — a user's or their agent's — returns exactly the rows can() allows. Tested against Postgres, NULLs included.",
 	"keywords": [
 		"authorization",

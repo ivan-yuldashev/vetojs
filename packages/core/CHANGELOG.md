@@ -1,5 +1,11 @@
 # @vetojs/core
 
+## 1.2.0
+
+### Minor Changes
+
+- a766438: **Node.js 22 or newer.** The packages are tested on Node 22 and 24; `engines` now asks for `>=22`.
+
 ## 1.1.0
 
 ### Minor Changes
