@@ -24,7 +24,7 @@ pnpm knip        # unused exports
 pnpm check:packaging  # publint + are-the-types-wrong, on what npm would receive
 ```
 
-CI runs the tests on Node 22 and 24 and the rest once, along with the React tests against React 18. `pnpm test:coverage` is there when you want the numbers, `pnpm type-bench` when you want the inference cost of the public types.
+CI runs the tests on Node 22 and 24 and the rest once, along with the React tests against React 18. `pnpm test:coverage` is there when you want the numbers, `pnpm type-bench` when you want the inference cost of the public types, `pnpm bench:casl` when you want the speed comparison the README quotes.
 
 To run one package's tests, either form works:
 

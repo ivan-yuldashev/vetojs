@@ -206,12 +206,12 @@ Measured on a five-rule policy, among them `allow(["update", "publish"], "post",
 
 | | |
 |---|---|
-| build the ability for a request | 0.19 µs |
-| check one row | 0.17 µs |
-| gate a hundred rows | 9.3 µs |
-| build, then gate a hundred rows | 13 µs |
-| `ability.where()` for the database | 0.4 µs |
-| parse rules that arrived as text, validate them, then build | 6.6 µs |
+| `buildAbility(ac, policyFor(user))` for a request | 1.4 µs |
+| check one row | 0.10 µs |
+| gate a hundred rows | 8.0 µs |
+| build, then gate a hundred rows | 10 µs |
+| `ability.where()` for the database | 0.20 µs |
+| rules that arrived as text: validate with `parseRules`, build, check a row | 6.4 µs |
 
 `ability.where()` removes the gating wherever the rows arrive by query: the database hands back only the permitted ones and there is nothing left to check in JavaScript. What is already in memory — a nested comment list, a third-party API response — still goes through `can()`.
 
@@ -239,13 +239,17 @@ Size matters where the rules travel to the browser. [A test](packages/core/tests
 | the whole package | 6.9 kB gzip | 7.0 kB gzip |
 | gate a server component | — | 98 bytes |
 
-Speed was compared on the same rules and the same rows as in [what a check costs](#what-a-check-costs), median of ten runs. Next to each number, the moment something pays it:
+Speed was compared on plain objects — the rows veto reads, as Prisma, Drizzle, `fetch` and Mongoose with `.lean()` return them; CASL tags each one with `subject()`. Each library runs in its own Node process, imported from its published build, and builds its ability anew for every request: veto from `allow`, CASL from plain rule objects, the fastest of the forms its docs describe. The two give the same answer to each of 1672 checks. The figures are medians of ten processes per library, and `pnpm bench:casl` reproduces them.
 
-- **Building the policy: ~38× faster here.** A server component builds the ability on every render and every navigation, so this is the cost of a single request. CASL indexes its rules up front and spends about 11 µs on 222 of them; `buildAbility` builds nothing — it closes over the array and spends 0.3.
-- **Refusing a row: 2.6× faster here.** "No" is the common answer — a hidden button, a row left out of a list — and a list repeats it a hundred times over.
-- **Reaching through a relation: 1.4× faster here.** Multi-tenant policies almost always check membership along a chain like `post.blog.workspace`, so this is not a rare case but the main path.
-- **A 222-rule policy where an early rule grants: 7.7–10× faster here.** That is what a policy looks like when it is generated per tenant instead of per role. When nothing matches at all, the margin falls to 1.7×.
-- **The same 222 rules when the granting rule sits last: 2.3× faster there.** CASL's precedence is positional: it stops at the first rule that matches. Here a `deny` wins wherever it sits, so a yes has to see every prohibition. The loss shows up only on a policy [you should not write anyway](docs/create-rules.md#one-rule-per-role-not-per-tenant): grouped by role, those 222 rules collapse to a dozen, and you are back at the previous point.
+- **A serverless cold start: about 9 ms sooner here.** Loading the library takes 4 ms against 13, measured from `node_modules`; a bundler shortens both. The first request — build the ability, check a hundred rows — then takes about 1.1 ms in each.
+- **An API handler that builds the ability and checks one row: even,** about 2.5 µs each. `allow` compiles its shorthand when the rule is created, CASL parses a condition the first time a check reaches it, and by the end of that first check both have paid the same.
+- **A page that renders a list: 4.7× faster here.** Building the ability and gating a hundred rows takes 10 µs against 49.
+- **An ability kept for a session or in the browser: ~5× faster per check.** 0.10 µs against 0.52, a hundred rows 8 µs against 45 — paid on every row of every render. Refusing is just as fast, and "no" is the common answer — a hidden button, a row left out of a list.
+- **A check through a relation: 2.5× faster here.** Multi-tenant policies almost always check membership along a chain like `post.blog.workspace`, so this is not a rare case but the main path.
+- **Rules your own server saved — `ability.rules` in a cache or a session — rebuilt for a request: even,** 4.3 µs against 4.8 with the first check. Rules from outside — an admin UI, a model — go through [`parseRules`](docs/parse.md) first, 6.4 µs here; CASL has no such step.
+- **222 rules generated per tenant: 2× faster per check, 3.2× slower to build per request,** 0.4 ms against 0.12. `allow` compiles all 222 rules up front, while CASL parses only the conditions a check reaches. Grouped by role, those rules collapse to a dozen — [the policy to write anyway](docs/create-rules.md#one-rule-per-role-not-per-tenant) — and a request is back to the microseconds above.
+
+Class instances — TypeORM entities, Mongoose documents without `.lean()` — are copied into plain objects before a check ([relations](docs/relations.md)), while CASL reads them as they are. With that copy, a check is 1.4–1.6× faster here, a list page 1.3×, and through a relation CASL is 1.4× faster.
 
 [Migrating from CASL](docs/migrate-from-casl.md) maps the API across, names the operators that have no equivalent, and covers the two behaviour differences that can change what your policy decides.
 

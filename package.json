@@ -19,6 +19,7 @@
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
 		"bench": "pnpm build && vitest bench",
+		"bench:casl": "pnpm build && node packages/core/bench/casl.mjs",
 		"type-bench": "tsc -p packages/core/type-bench/tsconfig.json --extendedDiagnostics",
 		"typecheck": "pnpm typecheck:packages && pnpm --filter \"./examples/*\" typecheck",
 		"typecheck:packages": "tsc -p tsconfig.json --noEmit",

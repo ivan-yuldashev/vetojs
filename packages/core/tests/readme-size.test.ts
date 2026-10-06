@@ -20,6 +20,10 @@ const repo = fileURLToPath(new URL("../../..", import.meta.url)).replace(
 );
 const coreDist = `${repo}/packages/core/dist/index.js`;
 const serverDist = `${repo}/packages/react/dist/server.js`;
+const caslEntry = fileURLToPath(import.meta.resolve("@casl/ability")).replace(
+	/\\/g,
+	"/",
+);
 
 async function ship(code: string) {
 	const dir = mkdtempSync(join(tmpdir(), "veto-size-")).replace(/\\/g, "/");
@@ -71,12 +75,27 @@ globalThis.out = ability.can("update", "post", globalThis.post);
 
 const whole = `export * from "${coreDist}";`;
 
+const caslTrusted = `
+import { createMongoAbility, subject } from "${caslEntry}";
+const ability = createMongoAbility(globalThis.rules);
+globalThis.out = ability.can("update", subject("post", globalThis.post));
+`;
+
+const caslWhole = `export * from "${caslEntry}";`;
+
 const serverGate = `
 import { Can } from "${serverDist}";
 globalThis.out = Can;
 `;
 
-const size = { browser: "", trusted: "", whole: "", gate: 0 };
+const size = {
+	browser: "",
+	trusted: "",
+	whole: "",
+	gate: 0,
+	caslTrusted: "",
+	caslWhole: "",
+};
 
 const claims = [
 	{
@@ -104,6 +123,18 @@ const claims = [
 		get: () => size.trusted,
 	},
 	{
+		what: "CASL, build an ability from trusted rules and check a row",
+		en: /check a row \| ([\d.]+) kB gzip \| \*\*[\d.]+ kB gzip\*\*/,
+		ru: /доверенных правил и проверить строку \| ([\d.]+) kB gzip/,
+		get: () => size.caslTrusted,
+	},
+	{
+		what: "CASL, whole package",
+		en: /the whole package \| ([\d.]+) kB gzip/,
+		ru: /весь пакет целиком \| ([\d.]+) kB gzip/,
+		get: () => size.caslWhole,
+	},
+	{
 		what: "whole package",
 		en: /the whole package \| [\d.]+ kB gzip \| ([\d.]+) kB gzip/,
 		ru: /весь пакет целиком \| [\d.]+ kB gzip \| ([\d.]+) kB gzip/,
@@ -114,6 +145,41 @@ const claims = [
 		en: /(\d+) bytes/,
 		ru: /(\d+) байт/,
 		get: () => String(size.gate),
+	},
+];
+
+const packageClaims = [
+	{
+		what: "browser bundle on trusted rules",
+		en: /Building an ability and checking a row is ([\d.]+) kB gzip/,
+		ru: /Собрать ability и проверить строку — ([\d.]+) kB gzip/,
+		get: () => size.trusted,
+	},
+	{
+		what: "browser bundle",
+		en: /with validation of the rules that arrived, ([\d.]+) kB/,
+		ru: /вместе с валидацией пришедших правил — ([\d.]+) kB/,
+		get: () => size.browser,
+	},
+	{
+		what: "browser bundle on trusted rules, CASL table",
+		en: /check a row \| [\d.]+ kB gzip \| \*\*([\d.]+) kB gzip\*\*/,
+		ru: /проверить строку \| [\d.]+ kB gzip \| \*\*([\d.]+) kB gzip\*\*/,
+		get: () => size.trusted,
+	},
+	{
+		what: "CASL, build an ability and check a row",
+		en: /check a row \| ([\d.]+) kB gzip \| \*\*[\d.]+ kB gzip\*\*/,
+		ru: /проверить строку \| ([\d.]+) kB gzip \| \*\*[\d.]+ kB gzip\*\*/,
+		get: () => size.caslTrusted,
+	},
+];
+
+const readmes = [
+	{ files: ["README.md", "README.ru.md"], claims },
+	{
+		files: ["packages/core/README.md", "packages/core/README.ru.md"],
+		claims: packageClaims,
 	},
 ];
 
@@ -140,24 +206,28 @@ describe("the README's bundle sizes are what a bundler produces", () => {
 		size.trusted = (await ship(trusted)).kB;
 		size.whole = (await ship(whole)).kB;
 		size.gate = (await ship(serverGate)).bytes;
+		size.caslTrusted = (await ship(caslTrusted)).kB;
+		size.caslWhole = (await ship(caslWhole)).kB;
 	}, 120_000);
 
-	for (const file of ["README.md", "README.ru.md"]) {
-		for (const claim of claims) {
-			it(`${file}: ${claim.what}`, () => {
-				const text = readFileSync(`${repo}/${file}`, "utf8");
-				const pattern = file.endsWith(".ru.md") ? claim.ru : claim.en;
-				const found = [...text.matchAll(new RegExp(pattern.source, "g"))];
+	for (const readme of readmes) {
+		for (const file of readme.files) {
+			for (const claim of readme.claims) {
+				it(`${file}: ${claim.what}`, () => {
+					const text = readFileSync(`${repo}/${file}`, "utf8");
+					const pattern = file.endsWith(".ru.md") ? claim.ru : claim.en;
+					const found = [...text.matchAll(new RegExp(pattern.source, "g"))];
 
-				expect(
-					found.length,
-					`expected a ${claim.what} claim in ${file} — did the wording change?`,
-				).toBeGreaterThan(0);
+					expect(
+						found.length,
+						`expected a ${claim.what} claim in ${file} — did the wording change?`,
+					).toBeGreaterThan(0);
 
-				for (const match of found) {
-					expect(match[1]).toBe(claim.get());
-				}
-			});
+					for (const match of found) {
+						expect(match[1]).toBe(claim.get());
+					}
+				});
+			}
 		}
 	}
 });
