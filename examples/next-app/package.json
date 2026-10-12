@@ -17,7 +17,7 @@
 		"@vetojs/react": "workspace:*",
 		"@electric-sql/pglite": "^0.5.8",
 		"drizzle-orm": "^0.45.3",
-		"next": "^16.3.6",
+		"next": "^16.3.8",
 		"react": "^19.3.0",
 		"react-dom": "^19.3.0"
 	},
