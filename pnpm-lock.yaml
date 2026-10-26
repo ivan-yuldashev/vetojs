@@ -45,8 +45,8 @@ importers:
   examples/drizzle-pg:
     dependencies:
       '@electric-sql/pglite':
-        specifier: ^0.5.9
-        version: 0.5.9
+        specifier: ^0.5.10
+        version: 0.5.10
       '@vetojs-examples/shared':
         specifier: workspace:*
         version: link:../shared
@@ -58,7 +58,7 @@ importers:
         version: link:../../packages/drizzle
       drizzle-orm:
         specifier: ^0.45.4
-        version: 0.45.4(@electric-sql/pglite@0.5.9)(@types/pg@8.23.1)(pg@8.23.0)
+        version: 0.45.4(@electric-sql/pglite@0.5.10)(@types/pg@8.23.1)(pg@8.23.0)
       pg:
         specifier: ^8.16.0
         version: 8.23.0
@@ -73,8 +73,8 @@ importers:
   examples/next-app:
     dependencies:
       '@electric-sql/pglite':
-        specifier: ^0.5.9
-        version: 0.5.9
+        specifier: ^0.5.10
+        version: 0.5.10
       '@vetojs-examples/shared':
         specifier: workspace:*
         version: link:../shared
@@ -89,7 +89,7 @@ importers:
         version: link:../../packages/react
       drizzle-orm:
         specifier: ^0.45.4
-        version: 0.45.4(@electric-sql/pglite@0.5.9)(@types/pg@8.23.1)(pg@8.23.0)
+        version: 0.45.4(@electric-sql/pglite@0.5.10)(@types/pg@8.23.1)(pg@8.23.0)
       next:
         specifier: ^16.4.0
         version: 16.4.0(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -165,14 +165,14 @@ importers:
   packages/drizzle:
     devDependencies:
       '@electric-sql/pglite':
-        specifier: ^0.5.9
-        version: 0.5.9
+        specifier: ^0.5.10
+        version: 0.5.10
       '@vetojs/core':
         specifier: workspace:^
         version: link:../core
       drizzle-orm:
         specifier: ^0.45.4
-        version: 0.45.4(@electric-sql/pglite@0.5.9)(@types/pg@8.23.1)(pg@8.23.0)
+        version: 0.45.4(@electric-sql/pglite@0.5.10)(@types/pg@8.23.1)(pg@8.23.0)
 
   packages/react:
     devDependencies:
@@ -414,8 +414,8 @@ packages:
     resolution: {integrity: sha512-OoKoR0f76dCY666JlcbhmVTs2drYj1GUXZTYTcbUgJjh9Nv41aFfZ21bPQTERm5+L5cBDo466NltB2lplS5GBw==}
     engines: {node: '>=20.19.0'}
 
-  '@electric-sql/pglite@0.5.9':
-    resolution: {integrity: sha512-GoQTRMZ/o4J3sMW4mLDtDFGNOm1xy5oH+iHDALWll3uERY6OF4BSnL1t7FZH2Mlw+RPceDBlFJgSaecO73c4EA==}
+  '@electric-sql/pglite@0.5.10':
+    resolution: {integrity: sha512-tXc/25U3ulOkiRQuTFdwIv+JhBqtMdAF7Gvo6CfZZWtSB4+hgC4Wr2vwK5ngvvN5PJfAAEGIsfyCVy1JhCOBYw==}
 
   '@emnapi/core@1.11.0':
     resolution: {integrity: sha512-l9Oo58x0HOP5znGzVhYW9U3e5wVuA4LAZU2AGezTmkhO1CgQRFDhDg4nneHsu/t3WniXg9QrG2nIXL/ZS8ln8Q==}
@@ -2950,7 +2950,7 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.2': {}
 
-  '@electric-sql/pglite@0.5.9': {}
+  '@electric-sql/pglite@0.5.10': {}
 
   '@emnapi/core@1.11.0':
     dependencies:
@@ -3822,9 +3822,9 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
-  drizzle-orm@0.45.4(@electric-sql/pglite@0.5.9)(@types/pg@8.23.1)(pg@8.23.0):
+  drizzle-orm@0.45.4(@electric-sql/pglite@0.5.10)(@types/pg@8.23.1)(pg@8.23.0):
     optionalDependencies:
-      '@electric-sql/pglite': 0.5.9
+      '@electric-sql/pglite': 0.5.10
       '@types/pg': 8.23.1
       pg: 8.23.0
 
