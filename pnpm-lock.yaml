@@ -156,8 +156,8 @@ importers:
   packages/core:
     devDependencies:
       '@casl/ability':
-        specifier: 7.0.1
-        version: 7.0.1
+        specifier: 7.0.2
+        version: 7.0.2
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.29)(tsx@4.23.15)(typescript@6.0.3)(yaml@2.9.0)
@@ -302,8 +302,8 @@ packages:
     resolution: {integrity: sha512-0GEz8qJWokkUVYQYRukmkSHIFNoBH8QTreeHrAFbvz1XFYc3Y+puhMs8PQ5x8GNugiC2l5jvDBXKLbBIByeSBw==}
     hasBin: true
 
-  '@casl/ability@7.0.1':
-    resolution: {integrity: sha512-krOW1zQGEie5lH6fpryrcsPvc5r2pe5Vn5xbthuzc5X9gwzHIyZgGGgw9dMoSLHXdjB4BIVxGG/HBkG+1NuyZQ==}
+  '@casl/ability@7.0.2':
+    resolution: {integrity: sha512-NOYbLTaw080a1Na4CpBtyGpL+i9NZhtGGt/tPrrNpLEv8EawFusHZCgc58ewyPBiZ0NER0iudB0et+IP8xJbLg==}
 
   '@changesets/apply-release-plan@8.0.0':
     resolution: {integrity: sha512-kUd2pbf1w5/AYmBMb0Tt+rkIPCjFJdT0SZMrkOjJT/WV/QbtmvkyB5jkV0oaNPheavprZk+SfUiozUti7TIL2w==}
@@ -2803,7 +2803,7 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@casl/ability@7.0.1':
+  '@casl/ability@7.0.2':
     dependencies:
       '@ucast/mongo2js': 2.0.0
 

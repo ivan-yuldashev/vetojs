@@ -57,7 +57,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {
-		"@casl/ability": "7.0.1",
+		"@casl/ability": "7.0.2",
 		"tsup": "^8.5.1"
 	}
 }
