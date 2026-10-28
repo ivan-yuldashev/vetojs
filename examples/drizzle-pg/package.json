@@ -14,7 +14,7 @@
 		"@vetojs/drizzle": "workspace:*",
 		"@electric-sql/pglite": "^0.5.11",
 		"drizzle-orm": "^0.45.4",
-		"pg": "^8.16.0"
+		"pg": "^8.23.1"
 	},
 	"devDependencies": {
 		"@types/pg": "^8.23.1",
