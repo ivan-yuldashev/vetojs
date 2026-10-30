@@ -58,6 +58,6 @@
 	},
 	"devDependencies": {
 		"@casl/ability": "7.0.2",
-		"tsup": "^8.5.1"
+		"tsup": "^9.0.0"
 	}
 }
